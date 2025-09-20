@@ -23,25 +23,43 @@ export async function fetchInvoiceById(id) {
   return adaptInvoiceFromApi(inv);
 }
 
+// fetch product for auto complete
+export async function searchProducts({ query = '', limit = 8, page = 1 } = {}) {
+  const qs = new URLSearchParams();
+  if (query) qs.set('query', query);
+  qs.set('limit', String(limit));
+  qs.set('page', String(page));
+
+  const res = await fetch(`${API_URL}/products?${qs.toString()}`);
+  if (!res.ok) throw new Error(`GET /products failed: ${res.status}`);
+  const data = await res.json();
+  return data.items || [];
+}
+
 // create invoice
 export async function createInvoice(inv) {
-  const body = adaptInvoiceToCreate(inv);
+  const payload = {
+    code: inv.code,
+    date: inv.date, // ISO string or yyyy-mm-dd is fine; backend casts to Date
+    customerName: inv.customerName,
+    salesperson: inv.salesperson,
+    status: inv.status,      // 'paid' | 'pending' | 'draft'
+    notes: inv.notes || null,
+    items: (inv.items || []).map(it => ({
+      productId: it.productId ?? undefined,
+      name: it.name ?? undefined,
+      quantity: Number(it.quantity ?? 1),
+      unitPrice: Number(it.price ?? it.unitPrice ?? 0),
+    })),
+  };
 
   const res = await fetch(`${API_URL}/invoices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
-  if (res.status === 400) {
-    const j = await res.json().catch(() => ({}));
-    const err = new Error(j?.error || 'missing_fields');
-    err.fields = j?.fields;
-    throw err;
-  }
   if (!res.ok) throw new Error(`POST /invoices failed: ${res.status}`);
-
-  const created = await res.json();
-  return adaptInvoiceFromApi(created);
+  return await res.json();
 }
 
 // patch invoice
