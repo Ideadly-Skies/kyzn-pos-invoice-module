@@ -1,153 +1,171 @@
-import { createSlice } from "@reduxjs/toolkit";
-import moment from "moment";
-import { useState } from "react";
-import data from "../assets/data/data.json";
-import getForwardDate from "../functions/forwardDate";
-import generateID from "../functions/generateId";
+// src/redux/invoiceSlice.js
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import {
+  fetchInvoices as apiFetchInvoices,
+  fetchInvoiceById as apiFetchInvoiceById,
+} from '../api/invoices';
 
-const today = moment().format("YYYY-MM-DD");
+// ───────────────────────────────────────────────────────────────────────────────
+// Async thunks - loadInvoices from the backend
+// ───────────────────────────────────────────────────────────────────────────────
+export const loadInvoices = createAsyncThunk(
+  'invoices/loadInvoices',
+  async ({ cursor = null, limit = 10 } = {}) => {
+    return await apiFetchInvoices({ cursor, limit });
+  }
+);
 
-const invoiceSlice = createSlice({
-  name: "invoces",
+export const loadInvoiceById = createAsyncThunk(
+  'invoices/loadInvoiceById',
+  async (id) => {
+    return await apiFetchInvoiceById(id);
+  }
+);
 
+// ─────────────────────────────────────────────────────────────────────────────────
+// Slice
+// ─────────────────────────────────────────────────────────────────────────────────
+const slice = createSlice({
+  name: 'invoices',
   initialState: {
-    allInvoice: data,
+    allInvoice: [],
     filteredInvoice: [],
     invoiceById: null,
+    nextCursor: null,
+    loading: false,
+    error: null,
   },
-
   reducers: {
-    filterInvoice: (state, action) => {
-      const { allInvoice } = state;
-      if (action.payload.status === "") {
-        state.filteredInvoice = allInvoice;
-      } else {
-        const filteredData = allInvoice.filter((invoice) => {
-          return invoice.status === action.payload.status;
-        });
-        console.log(filteredData);
-        state.filteredInvoice = filteredData;
-      }
+    filterInvoice(state, action) {
+      const status = action.payload?.status || '';
+      state.filteredInvoice = status
+        ? state.allInvoice.filter((inv) => inv.status === status)
+        : state.allInvoice;
     },
-    getInvoiceById: (state, action) => {
-      const { allInvoice } = state;
-      const invoice = allInvoice.find((item) => item.id === action.payload.id);
-      state.invoiceById = invoice;
+    getInvoiceById(state, action) {
+      const id = String(action.payload.id);
+      state.invoiceById =
+        state.allInvoice.find((item) => String(item.id) === id) || null;
     },
-    deleteInvoice: (state, action) => {
-      const { allInvoice } = state;
-      const index = allInvoice.findIndex(
-        (invoice) => invoice.id === action.payload.id
-      );
-      if (index !== -1) {
-        allInvoice.splice(index, 1);
-      }
+    clearInvoices(state) {
+      state.allInvoice = [];
+      state.filteredInvoice = [];
+      state.invoiceById = null;
+      state.nextCursor = null;
+      state.loading = false;
+      state.error = null;
     },
-    updateInvoiceStatus: (state, action) => {
+    clearCurrentInvoice(state) {
+      state.invoiceById = null;
+    },
+    updateInvoiceStatus(state, action) {
       const { id, status } = action.payload;
-      const invoiceToUpdate = state.allInvoice.find(
-        (invoice) => invoice.id === id
+      const target = state.allInvoice.find((i) => String(i.id) === String(id));
+      if (target) target.status = status;
+
+      state.filteredInvoice = state.filteredInvoice.map((i) =>
+        String(i.id) === String(id) ? { ...i, status } : i
       );
-      if (invoiceToUpdate) {
-        invoiceToUpdate.status = status;
+      if (state.invoiceById && String(state.invoiceById.id) === String(id)) {
+        state.invoiceById.status = status;
       }
     },
-    addInvoice: (state, action) => {
-      const {
-        description,
-        paymentTerms,
-        clientName,
-        clientEmail,
-        senderStreet,
-        senderCity,
-        senderPostCode,
-        senderCountry,
-        clientStreet,
-        clientCity,
-        clientPostCode,
-        clientCountry,
-        item,
-      } = action.payload;
+    updateInvoice(state, action) {
+      const updatedInvoice = action.payload;
+      const id = String(updatedInvoice.id);
+      
+      console.log('Redux updateInvoice action called with:', updatedInvoice);
+      
+      // Update in allInvoice array
+      const targetIndex = state.allInvoice.findIndex((i) => String(i.id) === id);
+      if (targetIndex !== -1) {
+        state.allInvoice[targetIndex] = updatedInvoice;
+        console.log('Updated invoice in allInvoice array at index:', targetIndex);
+      }
 
-      const finalData = {
-        id: `${generateID()}`,
-        createdAt: today,
-        paymentDue: getForwardDate(paymentTerms),
-        description: description,
-        paymentTerms: paymentTerms,
-        clientName: clientName,
-        clientEmail: clientEmail,
-        status: "pending",
-        senderAddress: {
-          street: senderStreet,
-          city: senderCity,
-          postCode: senderPostCode,
-          country: senderCountry,
-        },
-        clientAddress: {
-          street: clientStreet,
-          city: clientCity,
-          postCode: clientPostCode,
-          country: clientCountry,
-        },
-        items: item,
-        total: item.reduce((acc, i) => {
-          return acc + Number(i.total);
-        }, 0),
-      };
-      state.allInvoice.push(finalData);
-    },
-    editInvoice: (state, action) => {
-      const { allInvoice } = state;
-      const {
-        description,
-        paymentTerms,
-        clientName,
-        clientEmail,
-        senderStreet,
-        senderCity,
-        senderPostCode,
-        senderCountry,
-        clientStreet,
-        clientCity,
-        clientPostCode,
-        clientCountry,
-        item,
-        id,
-      } = action.payload;
+      // Update in filteredInvoice array
+      const filteredIndex = state.filteredInvoice.findIndex((i) => String(i.id) === id);
+      if (filteredIndex !== -1) {
+        state.filteredInvoice[filteredIndex] = updatedInvoice;
+        console.log('Updated invoice in filteredInvoice array at index:', filteredIndex);
+      }
 
-      const invoiceIndex = allInvoice.findIndex((invoice) => invoice.id === id);
-      const edittedObject = {
-        description: description,
-        paymentTerms: paymentTerms,
-        clientName: clientName,
-        clientEmail: clientEmail,
-        senderAddress: {
-          street: senderStreet,
-          city: senderCity,
-          postCode: senderPostCode,
-          country: senderCountry,
-        },
-        clientAddress: {
-          street: clientStreet,
-          city: clientCity,
-          postCode: clientPostCode,
-          country: clientCountry,
-        },
-        items: item,
-        total: item.reduce((acc, i) => {
-          return acc + Number(i.total);
-        }, 0),
-      };
-
-      if (invoiceIndex !== -1) {
-        allInvoice[invoiceIndex] = {
-          ...allInvoice[invoiceIndex] ,
-          ...edittedObject
-        };
+      // Update invoiceById if it's the current invoice
+      if (state.invoiceById && String(state.invoiceById.id) === id) {
+        console.log('Updating current invoiceById from:', state.invoiceById, 'to:', updatedInvoice);
+        state.invoiceById = updatedInvoice;
       }
     },
+    deleteInvoice(state, action) {
+      const id = String(action.payload.id);
+      state.allInvoice = state.allInvoice.filter((i) => String(i.id) !== id);
+      state.filteredInvoice = state.filteredInvoice.filter(
+        (i) => String(i.id) !== id
+      );
+      if (state.invoiceById && String(state.invoiceById.id) === id) {
+        state.invoiceById = null;
+      }
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(loadInvoices.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(loadInvoices.fulfilled, (state, action) => {
+        const { items, nextCursor } = action.payload;
+
+        // merge by id to avoid duplicates when paginating
+        const map = new Map(state.allInvoice.map((i) => [String(i.id), i]));
+        for (const it of items) map.set(String(it.id), it);
+        state.allInvoice = Array.from(map.values());
+
+        // default filtered view = all
+        state.filteredInvoice = state.allInvoice;
+
+        state.nextCursor = nextCursor ?? null;
+        state.loading = false;
+      })
+      .addCase(loadInvoices.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error?.message || 'Failed to load invoices';
+      })
+      .addCase(loadInvoiceById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(loadInvoiceById.fulfilled, (state, action) => {
+        const inv = action.payload;
+        // upsert into the list
+        const map = new Map(state.allInvoice.map(i => [String(i.id), i]));
+        map.set(String(inv.id), inv);
+        state.allInvoice = Array.from(map.values());
+        state.filteredInvoice = state.allInvoice;
+        state.invoiceById = inv;
+        state.loading = false;
+      })
+      .addCase(loadInvoiceById.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error?.message || 'Failed to load invoice';
+      })
   },
 });
 
-export default invoiceSlice;
+export const {
+  filterInvoice,
+  getInvoiceById,
+  clearInvoices,
+  clearCurrentInvoice,
+  updateInvoiceStatus,
+  updateInvoice,
+  deleteInvoice,
+} = slice.actions;
+
+export default slice.reducer;
+
+export const selectInvoices = (s) => s.invoices.filteredInvoice;
+export const selectInvoiceById = (s) => s.invoices.invoiceById;
+export const selectInvoicesLoading = (s) => s.invoices.loading;
+export const selectNextCursor = (s) => s.invoices.nextCursor;
+export const selectInvoicesError = (s) => s.invoices.error;
