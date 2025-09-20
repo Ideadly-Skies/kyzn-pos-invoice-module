@@ -1,21 +1,21 @@
-// --------- invoiceInfo helper -----------
+import {
+  loadInvoiceById,
+  getInvoiceById,
+  selectInvoiceById,
+  selectInvoicesLoading,
+  selectInvoicesError,
+  deleteInvoice,
+  updateInvoice,
+  updateInvoiceStatus,
+  clearCurrentInvoice
+} from '../redux/invoiceSlice';
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import leftArrow from '../assets/icon-arrow-left.svg';
 import { AnimatePresence, motion } from 'framer-motion';
 import PaidStatus from './PaidStatus';
 import { useDispatch, useSelector } from 'react-redux';
-
-import {
-  getInvoiceById,
-  loadInvoiceById,
-  selectInvoiceById,
-  selectInvoicesLoading,
-  selectInvoicesError,
-  deleteInvoice,
-  updateInvoiceStatus,
-  updateInvoice,
-} from '../redux/invoiceSlice';
+import Swal from 'sweetalert2';
 
 import { deleteInvoiceById, updateInvoiceStatus as apiUpdateInvoiceStatus } from '../api/invoices';
 import formatDate from '../functions/formatDate';
@@ -36,6 +36,7 @@ function InvoiceInfo() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false); // Flag to track if invoice was deleted
 
   const invoiceId = location.search.substring(1);
 
@@ -44,42 +45,56 @@ function InvoiceInfo() {
   const error = useSelector(selectInvoicesError);
 
   useEffect(() => {
-    if (invoiceId) dispatch(getInvoiceById({ id: invoiceId }));
-  }, [dispatch, invoiceId]);
+    if (invoiceId && !isDeleted) dispatch(getInvoiceById({ id: invoiceId }));
+  }, [dispatch, invoiceId, isDeleted]);
 
   useEffect(() => {
-    if (invoiceId && !invoice) dispatch(loadInvoiceById(invoiceId));
-  }, [dispatch, invoiceId, invoice]);
+    if (invoiceId && !invoice && !isDeleted) dispatch(loadInvoiceById(invoiceId));
+  }, [dispatch, invoiceId, invoice, isDeleted]);
 
   // Add effect to refresh invoice data when the edit modal closes
   useEffect(() => {
-    if (invoiceId && !isEditOpen) {
+    if (invoiceId && !isEditOpen && !isDeleted) {
       // When edit modal closes, refresh the invoice data to ensure it's up to date
       dispatch(loadInvoiceById(invoiceId));
     }
-  }, [dispatch, invoiceId, isEditOpen]);
+  }, [dispatch, invoiceId, isEditOpen, isDeleted]);
+
+  // Cleanup effect - clear current invoice when component unmounts
+  useEffect(() => {
+    return () => {
+      dispatch(clearCurrentInvoice());
+    };
+  }, [dispatch]);
 
   const onMakePaidClick = async () => {
     try {
-      setIsUpdatingStatus(true);
-      console.log(`Updating invoice ${invoiceId} status to paid...`);
-      
-      // Call the API to update the invoice status
-      const result = await apiUpdateInvoiceStatus(invoiceId, 'paid');
-      console.log(`Invoice ${invoiceId} status updated successfully on server`, result);
-      
-      // Update Redux state with the full updated invoice
-      const updatedInvoice = { ...invoice, status: 'paid' };
-      dispatch(updateInvoice(updatedInvoice));
-      
-      // Also update using the specific status action for redundancy
-      dispatch(updateInvoiceStatus({ id: invoiceId, status: 'paid' }));
-      
-      console.log(`Invoice ${invoiceId} status updated in Redux state`);
-      
+        setIsUpdatingStatus(true);
+        console.log(`Updating invoice ${invoiceId} status to paid...`);
+        
+        // Call the API to update the invoice status
+        const result = await apiUpdateInvoiceStatus(invoiceId, 'paid');
+        console.log(`Invoice ${invoiceId} status updated successfully on server`, result);
+        
+        // Update Redux state with the status change
+        dispatch(updateInvoiceStatus({ id: invoiceId, status: 'paid' }));
+        
+        console.log(`Invoice ${invoiceId} status updated in Redux state`);
+        
+        Swal.fire({
+            title: `Payment Success!`,
+            text: "Successfully changed payment status to 'paid'",
+            icon: "success"
+        });
+
     } catch (error) {
       console.error('Failed to update invoice status:', error);
-      alert(`Failed to update invoice status: ${error.message}`);
+      Swal.fire({
+        title: 'Error!',
+        text: `Failed to update invoice status: ${error.message}`,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -90,24 +105,46 @@ function InvoiceInfo() {
       setIsDeleting(true);
       console.log(`Deleting invoice ${invoiceId}...`);
       
+      // Set the isDeleted flag immediately to prevent any API calls
+      setIsDeleted(true);
+      
       // Call the API to delete the invoice
       await deleteInvoiceById(invoiceId);
       console.log(`Invoice ${invoiceId} deleted successfully from server`);
       
-      // Update Redux state to remove the invoice
+      // Update Redux state to remove the invoice and clear current invoice
       dispatch(deleteInvoice({ id: invoiceId }));
+      dispatch(clearCurrentInvoice());
       console.log(`Invoice ${invoiceId} removed from Redux state`);
       
       // Close the delete modal
       setIsDeleteModalOpen(false);
       
-      // Navigate back to the invoice list
-      navigate('/');
+      // Navigate back to the invoice list immediately
+      navigate('/', { replace: true });
       
-      console.log('Navigated back to invoice list');
+      // Show success message (non-blocking)
+      setTimeout(() => {
+        Swal.fire({
+          title: 'Success!',
+          text: 'Invoice deleted successfully',
+          icon: 'success',
+          confirmButtonText: 'OK',
+          timer: 3000, // Auto-close after 3 seconds
+          timerProgressBar: true
+        });
+      }, 100);
+      
+      console.log('Invoice deletion completed successfully');
     } catch (error) {
       console.error('Failed to delete invoice:', error);
-      alert(`Failed to delete invoice: ${error.message}`);
+      setIsDeleted(false); // Reset the flag if deletion failed
+      Swal.fire({
+        title: 'Error!',
+        text: `Failed to delete invoice: ${error.message}`,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
       // Don't close modal or navigate if deletion failed
     } finally {
       setIsDeleting(false);

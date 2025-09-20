@@ -155,7 +155,7 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                 
                 setOpenCreateInvoice(false);
 
-                Swal.fire({ icon: 'success', title: `Invoice updated for customer ${result.customer_name}`, timer: 1500, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: `Invoice updated for customer ${result.clientName}`, timer: 1500, showConfirmButton: false });
             } catch (e) {
                 const action = await showError('Failed to update invoice', e, { payload: editPayload });
                 if (action === 'retry') {

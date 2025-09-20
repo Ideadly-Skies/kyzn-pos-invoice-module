@@ -55,6 +55,9 @@ const slice = createSlice({
       state.loading = false;
       state.error = null;
     },
+    clearCurrentInvoice(state) {
+      state.invoiceById = null;
+    },
     updateInvoiceStatus(state, action) {
       const { id, status } = action.payload;
       const target = state.allInvoice.find((i) => String(i.id) === String(id));
@@ -153,6 +156,7 @@ export const {
   filterInvoice,
   getInvoiceById,
   clearInvoices,
+  clearCurrentInvoice,
   updateInvoiceStatus,
   updateInvoice,
   deleteInvoice,
