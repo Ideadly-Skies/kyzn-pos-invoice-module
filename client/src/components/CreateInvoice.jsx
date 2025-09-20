@@ -3,8 +3,8 @@ import { motion } from 'framer-motion'
 import AddItem from './AddItem'
 import { v4 as uuidv4 } from "uuid";
 import { useDispatch } from 'react-redux';
-import { loadInvoices, filterInvoice } from '../redux/invoiceSlice';
-import { createInvoice as apiCreateInvoice, patchInvoice } from '../api/invoices';
+import { loadInvoices, filterInvoice, updateInvoice } from '../redux/invoiceSlice';
+import { createInvoice as apiCreateInvoice, patchInvoice, adaptInvoiceFromApi } from '../api/invoices';
 import {
   validateSenderStreetAddress, validateSenderPostCode, validateSenderCity,
   validateCLientEmail, validateCLientName, validateClientCity, validateClientPostCode,
@@ -12,226 +12,273 @@ import {
   validateSenderCountry, validateClientCountry
 } from '../functions/createInvoiceValidator'
 
+// import sweetalert for notification
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css';
+
+// helper function to show a rich error with "Retry" and "Copy details"
+const escapeHtml = (s = '') =>
+  s.replace(/[&<>"'`]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]));
+
+async function showError(title, err, debug = {}) {
+  const message =
+    err?.response?.data?.error ||
+    err?.response?.data?.message ||
+    err?.message ||
+    'Unexpected error';
+
+  const details = JSON.stringify(
+    {
+      message,
+      status: err?.response?.status,
+      url: err?.response?.config?.url,
+      ...debug,
+    },
+    null,
+    2
+  );
+
+  const res = await Swal.fire({
+    icon: 'error',
+    title,
+    html: `
+      <div style="text-align:left">
+        <p style="margin:0 0 6px 0">${escapeHtml(message)}</p>
+        <details>
+          <summary style="cursor:pointer">Show technical details</summary>
+          <pre style="white-space:pre-wrap;max-height:200px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:6px;margin-top:8px">${escapeHtml(details)}</pre>
+        </details>
+      </div>
+    `,
+    showConfirmButton: true,
+    confirmButtonText: 'Retry',
+    showDenyButton: true,
+    denyButtonText: 'Copy details',
+    showCancelButton: true,
+    cancelButtonText: 'Close',
+    reverseButtons: true,
+    focusCancel: true,
+  });
+
+  if (res.isDenied) {
+    await navigator.clipboard.writeText(details);
+    await Swal.fire({ icon: 'success', title: 'Copied error to clipboard', timer: 1200, showConfirmButton: false });
+    return 'copied';
+  }
+  if (res.isConfirmed) return 'retry';
+  return 'close';
+}
+
 function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type }) {
-  const dispatch = useDispatch()
+    const dispatch = useDispatch()
 
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
-  const [isValidatorActive, setIsValidatorActive] = useState(false)
+    const [isFirstLoad, setIsFirstLoad] = useState(true);
+    const [isValidatorActive, setIsValidatorActive] = useState(false)
 
-  const [filterValue, setfilterValue] = useState('')
-  const deliveryTimes = [
-    { text: 'Next 1 day', value: 1 },
-    { text: 'Next 7 day', value: 7 },
-    { text: 'Next 14 day', value: 14 },
-    { text: 'Next 30 day', value: 30 },
-  ]
-  const [senderStreet, setSenderStreet] = useState('')
-  const [senderCity, setSenderCity] = useState('')
-  const [senderPostCode, setSenderPostCode] = useState('')
-  const [senderCountry, setSenderCountry] = useState('')
+    const [filterValue, setfilterValue] = useState('')
+    const deliveryTimes = [
+        { text: 'Next 1 day', value: 1 },
+        { text: 'Next 7 day', value: 7 },
+        { text: 'Next 14 day', value: 14 },
+        { text: 'Next 30 day', value: 30 },
+    ]
+    const [senderStreet, setSenderStreet] = useState('')
+    const [senderCity, setSenderCity] = useState('')
+    const [senderPostCode, setSenderPostCode] = useState('')
+    const [senderCountry, setSenderCountry] = useState('')
 
-  const [clientName, setClientName] = useState('')
-  const [clientEmail, setClientEmail] = useState('')
+    const [clientName, setClientName] = useState('')
+    const [clientEmail, setClientEmail] = useState('')
 
-  const [clientStreet, setClientStreet] = useState('')
-  const [clientCity, setClientCity] = useState('')
-  const [clientPostCode, setClientPostCode] = useState('')
-  const [clientCountry, setClientCountry] = useState('')
-  const [description, setDescription] = useState('')
+    const [clientStreet, setClientStreet] = useState('')
+    const [clientCity, setClientCity] = useState('')
+    const [clientPostCode, setClientPostCode] = useState('')
+    const [clientCountry, setClientCountry] = useState('')
+    const [description, setDescription] = useState('')
 
-  const [selectDeliveryDate, setSelectDeliveryDate] = useState('')
-  const [paymentTerms, setpaymentTerms] = useState(deliveryTimes[0].value)
+    const [selectDeliveryDate, setSelectDeliveryDate] = useState('')
+    const [paymentTerms, setpaymentTerms] = useState(deliveryTimes[0].value)
 
-  // NEW
-  const [salesperson, setSalesperson] = useState('')
-  const [status, setStatus] = useState('pending')
+    // NEW
+    const [salesperson, setSalesperson] = useState('')
+    const [status, setStatus] = useState('pending')
 
-  const [item, setItem] = useState([
-    { name: "", quantity: 1, price: 0, total: 0, id: uuidv4() }
-  ])
+    const [item, setItem] = useState([
+        { name: "", quantity: 1, price: 0, total: 0, id: uuidv4() }
+    ])
 
-  const onDelete = (id) => {
-    setItem((pervState) => pervState.filter((el) => el.id !== id))
-  }
-
-  const handelOnChange = (id, e) => {
-    let data = [...item]
-    let foundData = data.find((el) => el.id === id)
-
-    // FIXED condition
-    if (e.target.name === 'quantity' || e.target.name === 'price') {
-      foundData[e.target.name] = e.target.value
-      foundData['total'] = (
-        Number(foundData.quantity) * Number(foundData.price)
-      ).toFixed(2)
-    } else {
-      foundData[e.target.name] = e.target.value
+    const onDelete = (id) => {
+        setItem((pervState) => pervState.filter((el) => el.id !== id))
     }
 
-    setItem(data);
-  }
+    const handelOnChange = (id, e) => {
+        let data = [...item]
+        let foundData = data.find((el) => el.id === id)
 
-  const onSubmit = async () => {
-    if (type === 'edit') {
-      console.log("Editing existing invoice...");
-      
-      const editPayload = {
-        customerName: clientName,
-        salesperson,
-        notes: description || '',
-        status,
-      };
+        // FIXED condition
+        if (e.target.name === 'quantity' || e.target.name === 'price') {
+            foundData[e.target.name] = e.target.value
+            foundData['total'] = (
+                Number(foundData.quantity) * Number(foundData.price)
+            ).toFixed(2)
+        } else {
+            foundData[e.target.name] = e.target.value
+        }
 
-      console.log("Edit payload to send:", JSON.stringify(editPayload, null, 2));
+        setItem(data);
+    }
 
-      try {
-        console.log("Sending PATCH request to API...");
-        const result = await patchInvoice(invoice.id, editPayload);
-        console.log("Invoice updated successfully:", result);
-        
-        console.log("Reloading invoices...");
-        await dispatch(loadInvoices({ limit: 10 }));
-        
-        console.log("Applying filter...");
-        dispatch(filterInvoice({ status: filterValue }));
-        
-        console.log("Closing modal...");
-        setOpenCreateInvoice(false);
-        
-        // Optionally show success message
-        alert('Invoice updated successfully!');
-      } catch (e) {
-        console.error("Failed to update invoice:", e);
-        console.error("Error details:", {
-          message: e.message,
-          stack: e.stack,
-          payload: editPayload
+    const onSubmit = async () => {
+        if (type === 'edit') {
+            const editPayload = {
+                customerName: clientName,
+                salesperson,
+                notes: description || '',
+                status,
+            };
+
+            try {
+                console.log("Original invoice:", invoice);
+                const result = await patchInvoice(invoice.id, editPayload);
+                console.log("Patch result:", result);
+                
+                // Use the adapter to convert API result to UI format, but merge with existing invoice data
+                const adaptedResult = adaptInvoiceFromApi({ ...result, items: invoice.items || [] });
+                console.log("Adapted result:", adaptedResult);
+                
+                // Update the specific invoice in Redux
+                dispatch(updateInvoice(adaptedResult));
+                
+                // Also reload the full list to keep everything in sync
+                await dispatch(loadInvoices({ limit: 10 }));
+                dispatch(filterInvoice({ status: filterValue }));
+                
+                setOpenCreateInvoice(false);
+
+                Swal.fire({ icon: 'success', title: `Invoice updated for customer ${result.customer_name}`, timer: 1500, showConfirmButton: false });
+            } catch (e) {
+                const action = await showError('Failed to update invoice', e, { payload: editPayload });
+                if (action === 'retry') {
+                    try { await onSubmit(); } catch (_) {}
+                }
+            }
+
+        } else {
+            const payload = {
+                code: `INV-${Date.now()}`,
+                date: selectDeliveryDate ? new Date(selectDeliveryDate) : new Date(),
+                customerName: clientName,
+                salesperson,
+                status,
+                notes: description || '',
+                items: item
+                    .filter(it => (it.name && String(it.name).trim()) || it.productId)
+                    .map(it => ({
+                    productId: it.productId ?? undefined,
+                    name: it.name ?? undefined,
+                    quantity: Number(it.quantity || 1),
+                    unitPrice: Number(it.price || 0),
+                    })),
+            };
+
+            try {
+                const result = await apiCreateInvoice(payload);
+                await dispatch(loadInvoices({ limit: 10 }));
+                dispatch(filterInvoice({ status: filterValue }));
+                setOpenCreateInvoice(false);
+
+                Swal.fire({
+                    title: `Invoice created for ${result.customer_name}!`,
+                    icon: 'success',
+                    timer: 1800,
+                    showConfirmButton: false,
+                });
+            } catch (e) {
+                const action = await showError('Failed to create invoice', e, { payload });
+                if (action === 'retry') {
+                    try { await onSubmit(); } catch (_) {}
+                }
+            }
+        }
+    };
+
+    if (type === 'edit' && isFirstLoad) {
+        const updatedItemsArray = invoice.items.map((obj, index) => {
+            return { ...obj, id: index + 1 };
         });
-        alert(`Failed to update invoice: ${e.message}`);
-      }
-    } else {
-      console.log("Creating new invoice...");
 
-      const payload = {
-        code: `INV-${Date.now()}`,
-        date: selectDeliveryDate ? new Date(selectDeliveryDate) : new Date(),
-        customerName: clientName,
-        salesperson,
-        status,
-        notes: description || '',
-        items: item
-          .filter(it => (it.name && String(it.name).trim()) || it.productId)
-          .map(it => ({
-            productId: it.productId ?? undefined,
-            name: it.name ?? undefined,
-            quantity: Number(it.quantity || 1),
-            unitPrice: Number(it.price || 0),
-          })),
-      };
+        setClientName(invoice.clientName)
+        setClientCity(invoice.clientAddress.city)
+        setClientStreet(invoice.clientAddress.street)
+        setClientPostCode(invoice.clientAddress.postCode)
+        setClientCountry(invoice.clientAddress.country)
+        setClientEmail(invoice.clientEmail)
+        setpaymentTerms(invoice.paymentTerms)
+        setDescription(invoice.description)
+        setSenderCity(invoice.senderAddress.city)
+        setSenderStreet(invoice.senderAddress.street)
+        setSenderCountry(invoice.senderAddress.country)
+        setSenderPostCode(invoice.senderAddress.postCode)
+        setSalesperson(invoice.salesperson || '')
+        setStatus(invoice.status || 'pending')
+        setItem(updatedItemsArray)
+        setIsFirstLoad(false)
+    }
 
-      console.log("Payload to send:", JSON.stringify(payload, null, 2));
+    function itemsValidator() {
+        const itemName = item.map(i => validateItemName(i.name))
+        const itemCount = item.map(i => validateItemCount(i.quantity))
+        const itemPrice = item.map(i => validateItemPrice(i.price))
+        const allItemsElement = itemCount.concat(itemPrice, itemName)
+        return (allItemsElement.includes(false) === true ? false : true)
+    }
 
-      try {
-        console.log("Sending POST request to API...");
-        const result = await apiCreateInvoice(payload);
-        console.log("Invoice created successfully:", result);
+    function validator() {
+        const salesValid = salesperson && salesperson.trim().length > 0;
         
-        console.log("Reloading invoices...");
-        await dispatch(loadInvoices({ limit: 10 }));
+        // For edit mode, only validate the fields that can be updated
+        if (type === 'edit') {
+            return validateCLientName(clientName) && salesValid;
+        }
         
-        console.log("Applying filter...");
-        dispatch(filterInvoice({ status: filterValue }))
+        // For create mode, validate all fields
+        if (
+            validateSenderStreetAddress(senderStreet) && validateSenderPostCode(senderPostCode) &&
+            validateSenderCity(senderCity) && validateCLientEmail(clientEmail) &&
+            validateCLientName(clientName) && validateClientCity(clientCity) &&
+            validateClientPostCode(clientPostCode) && validateClientStreetAddress(clientStreet) &&
+            validateSenderCountry(senderCountry) && validateClientCountry(clientCountry) && 
+            salesValid && itemsValidator()
+        ) { return true }
+
+        return false
+    }
+
+    function debugValidation() {
+        const salesValid = salesperson && salesperson.trim().length > 0;
         
-        console.log("Closing modal...");
-        setOpenCreateInvoice(false)
-      } catch (e) {
-        console.error("Failed to create invoice:", e);
-        console.error("Error details:", {
-          message: e.message,
-          stack: e.stack,
-          payload
-        });
-        alert(`Failed to create invoice: ${e.message}`);
-      }
+        if (type === 'edit') {
+            return {
+                clientName: validateCLientName(clientName),
+                salesperson: salesValid,
+            };
+        }
+        
+        return {
+            senderStreet: validateSenderStreetAddress(senderStreet),
+            senderPostCode: validateSenderPostCode(senderPostCode),
+            senderCity: validateSenderCity(senderCity),
+            clientEmail: validateCLientEmail(clientEmail),
+            clientName: validateCLientName(clientName),
+            clientCity: validateClientCity(clientCity),
+            clientPostCode: validateClientPostCode(clientPostCode),
+            clientStreet: validateClientStreetAddress(clientStreet),
+            senderCountry: validateSenderCountry(senderCountry),
+            clientCountry: validateClientCountry(clientCountry),
+            salesperson: salesValid,
+            items: itemsValidator()
+        }
     }
-  }
-
-  if (type === 'edit' && isFirstLoad) {
-    const updatedItemsArray = invoice.items.map((obj, index) => {
-      return { ...obj, id: index + 1 };
-    });
-
-    setClientName(invoice.clientName)
-    setClientCity(invoice.clientAddress.city)
-    setClientStreet(invoice.clientAddress.street)
-    setClientPostCode(invoice.clientAddress.postCode)
-    setClientCountry(invoice.clientAddress.country)
-    setClientEmail(invoice.clientEmail)
-    setpaymentTerms(invoice.paymentTerms)
-    setDescription(invoice.description)
-    setSenderCity(invoice.senderAddress.city)
-    setSenderStreet(invoice.senderAddress.street)
-    setSenderCountry(invoice.senderAddress.country)
-    setSenderPostCode(invoice.senderAddress.postCode)
-    setSalesperson(invoice.salesperson || '')
-    setStatus(invoice.status || 'pending')
-    setItem(updatedItemsArray)
-    setIsFirstLoad(false)
-  }
-
-  function itemsValidator() {
-    const itemName = item.map(i => validateItemName(i.name))
-    const itemCount = item.map(i => validateItemCount(i.quantity))
-    const itemPrice = item.map(i => validateItemPrice(i.price))
-    const allItemsElement = itemCount.concat(itemPrice, itemName)
-    return (allItemsElement.includes(false) === true ? false : true)
-  }
-
-  function validator() {
-    const salesValid = salesperson && salesperson.trim().length > 0;
-    
-    // For edit mode, only validate the fields that can be updated
-    if (type === 'edit') {
-      return validateCLientName(clientName) && salesValid;
-    }
-    
-    // For create mode, validate all fields
-    if (
-      validateSenderStreetAddress(senderStreet) && validateSenderPostCode(senderPostCode) &&
-      validateSenderCity(senderCity) && validateCLientEmail(clientEmail) &&
-      validateCLientName(clientName) && validateClientCity(clientCity) &&
-      validateClientPostCode(clientPostCode) && validateClientStreetAddress(clientStreet) &&
-      validateSenderCountry(senderCountry) && validateClientCountry(clientCountry) && 
-      salesValid && itemsValidator()
-    ) { return true }
-    return false
-  }
-
-  function debugValidation() {
-    const salesValid = salesperson && salesperson.trim().length > 0;
-    
-    if (type === 'edit') {
-      return {
-        clientName: validateCLientName(clientName),
-        salesperson: salesValid,
-      };
-    }
-    
-    return {
-      senderStreet: validateSenderStreetAddress(senderStreet),
-      senderPostCode: validateSenderPostCode(senderPostCode),
-      senderCity: validateSenderCity(senderCity),
-      clientEmail: validateCLientEmail(clientEmail),
-      clientName: validateCLientName(clientName),
-      clientCity: validateClientCity(clientCity),
-      clientPostCode: validateClientPostCode(clientPostCode),
-      clientStreet: validateClientStreetAddress(clientStreet),
-      senderCountry: validateSenderCountry(senderCountry),
-      clientCountry: validateClientCountry(clientCountry),
-      salesperson: salesValid,
-      items: itemsValidator()
-    }
-  }
 
   return (
     <div onClick={(e) => { if (e.target !== e.currentTarget) return; setOpenCreateInvoice(false); }}

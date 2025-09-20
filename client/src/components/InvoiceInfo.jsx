@@ -14,6 +14,7 @@ import {
   selectInvoicesError,
   deleteInvoice,
   updateInvoiceStatus,
+  updateInvoice,
 } from '../redux/invoiceSlice';
 
 import { deleteInvoiceById, updateInvoiceStatus as apiUpdateInvoiceStatus } from '../api/invoices';
@@ -50,17 +51,30 @@ function InvoiceInfo() {
     if (invoiceId && !invoice) dispatch(loadInvoiceById(invoiceId));
   }, [dispatch, invoiceId, invoice]);
 
+  // Add effect to refresh invoice data when the edit modal closes
+  useEffect(() => {
+    if (invoiceId && !isEditOpen) {
+      // When edit modal closes, refresh the invoice data to ensure it's up to date
+      dispatch(loadInvoiceById(invoiceId));
+    }
+  }, [dispatch, invoiceId, isEditOpen]);
+
   const onMakePaidClick = async () => {
     try {
       setIsUpdatingStatus(true);
       console.log(`Updating invoice ${invoiceId} status to paid...`);
       
       // Call the API to update the invoice status
-      await apiUpdateInvoiceStatus(invoiceId, 'paid');
-      console.log(`Invoice ${invoiceId} status updated successfully on server`);
+      const result = await apiUpdateInvoiceStatus(invoiceId, 'paid');
+      console.log(`Invoice ${invoiceId} status updated successfully on server`, result);
       
-      // Update Redux state
+      // Update Redux state with the full updated invoice
+      const updatedInvoice = { ...invoice, status: 'paid' };
+      dispatch(updateInvoice(updatedInvoice));
+      
+      // Also update using the specific status action for redundancy
       dispatch(updateInvoiceStatus({ id: invoiceId, status: 'paid' }));
+      
       console.log(`Invoice ${invoiceId} status updated in Redux state`);
       
     } catch (error) {
