@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useAnimation } from 'framer-motion';
 import arrowDown from '../assets/icon-arrow-down.svg';
 import plus from '../assets/plus.png';
 import InvoiceCard from './InvoiceCard';
+import TimeSeriesGraph from './TimeSeriesGraph';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   loadInvoices,
@@ -340,6 +341,9 @@ function Center() {
               </button>
             )}
           </div>
+
+          {/* Time Series Graph */}
+          <TimeSeriesGraph />
         </motion.div>
       </div>
 
