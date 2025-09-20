@@ -12,8 +12,10 @@ import {
   selectInvoiceById,
   selectInvoicesLoading,
   selectInvoicesError,
+  deleteInvoice,
 } from '../redux/invoiceSlice';
 
+import { deleteInvoiceById } from '../api/invoices';
 import formatDate from '../functions/formatDate';
 import DeleteModal from './DeleteModal';
 import CreateInvoice from './CreateInvoice';
@@ -23,13 +25,14 @@ const toIDR = (n) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
     .format(Number(n || 0));
 
-function InvoiceInfo({ onDelete }) {
+function InvoiceInfo() {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const invoiceId = location.search.substring(1);
 
@@ -50,10 +53,33 @@ function InvoiceInfo({ onDelete }) {
     dispatch(getInvoiceById({ id: invoiceId }));
   };
 
-  const onDeleteButtonClick = () => {
-    navigate('/');
-    setIsDeleteModalOpen(false);
-    onDelete?.(invoiceId);
+  const onDeleteButtonClick = async () => {
+    try {
+      setIsDeleting(true);
+      console.log(`Deleting invoice ${invoiceId}...`);
+      
+      // Call the API to delete the invoice
+      await deleteInvoiceById(invoiceId);
+      console.log(`Invoice ${invoiceId} deleted successfully from server`);
+      
+      // Update Redux state to remove the invoice
+      dispatch(deleteInvoice({ id: invoiceId }));
+      console.log(`Invoice ${invoiceId} removed from Redux state`);
+      
+      // Close the delete modal
+      setIsDeleteModalOpen(false);
+      
+      // Navigate back to the invoice list
+      navigate('/');
+      
+      console.log('Navigated back to invoice list');
+    } catch (error) {
+      console.error('Failed to delete invoice:', error);
+      alert(`Failed to delete invoice: ${error.message}`);
+      // Don't close modal or navigate if deletion failed
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading && !invoice) return <div className="p-6">loading…</div>;
@@ -199,6 +225,7 @@ function InvoiceInfo({ onDelete }) {
           onDeleteButtonClick={onDeleteButtonClick}
           setIsDeleteModalOpen={setIsDeleteModalOpen}
           invoiceId={invoice.id}
+          isDeleting={isDeleting}
         />
       )}
       <AnimatePresence>
