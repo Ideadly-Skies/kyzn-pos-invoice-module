@@ -91,6 +91,78 @@ app.get('/invoices', async (req, res) => {
   }
 });
 
+app.post('/invoices', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const body = req.body || {};
+    // minimal validation per brief
+    const missing = ['code','date','customerName','salesperson','status','items']
+      .filter(k => body[k] == null || (k === 'items' && !Array.isArray(body[k]) || (Array.isArray(body[k]) && !body[k].length)));
+    if (missing.length) return res.status(400).json({ error: `missing_fields`, fields: missing });
+
+    await client.query('BEGIN');
+
+    // compute total
+    let total = 0;
+    for (const it of body.items) {
+      const unit = Number(it.unitPrice ?? 0);
+      const qty = Number(it.quantity ?? 1);
+      total += unit * qty;
+    }
+
+    const invSql = `
+      INSERT INTO invoices (code, date, customer_name, salesperson, notes, status, total)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING id, code, date, customer_name, salesperson, notes, status, total
+    `;
+    const { rows: [inv] } = await client.query(invSql, [
+      body.code,
+      new Date(body.date),
+      body.customerName,
+      body.salesperson,
+      body.notes || null,
+      body.status, // 'paid' | 'pending' | 'draft'
+      total
+    ]);
+
+    const itemSql = `
+      INSERT INTO invoice_items (invoice_id, product_id, name, quantity, unit_price, line_total)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      RETURNING id, product_id, name, quantity, unit_price, line_total
+    `;
+    const items = [];
+    for (const it of body.items) {
+      // pull product name if only id provided
+      let name = it.name;
+      if (!name && it.productId) {
+        const { rows: [p] } = await client.query('SELECT name FROM products WHERE id = $1', [it.productId]);
+        name = p?.name;
+      }
+      const qty = Number(it.quantity || 1);
+      const price = Number(it.unitPrice || 0);
+      const line = qty * price;
+
+      const { rows: [ritem] } = await client.query(itemSql, [
+        inv.id, it.productId, name, qty, price, line
+      ]);
+      items.push(ritem);
+
+      // optional stock decrement
+      if (it.productId) {
+        await client.query('UPDATE products SET stock = GREATEST(0, stock - $1) WHERE id = $2', [qty, it.productId]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ ...inv, items });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error(e); res.status(500).json({ error: 'failed_to_create_invoice' });
+  } finally {
+    client.release();
+  }
+});
+
 // start our backend
 const port = process.env.PORT || 5000;
 app.listen(port, () => {console.log(`ϟϟϟ Server started on http://localhost:${port} ϟϟϟ`)})
