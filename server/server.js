@@ -163,6 +163,27 @@ app.post('/invoices', async (req, res) => {
   }
 });
 
+app.patch('/invoices/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { customerName, salesperson, notes, status } = req.body || {};
+    const { rows: [inv] } = await pool.query(
+      `UPDATE invoices
+       SET customer_name = COALESCE($2, customer_name),
+           salesperson   = COALESCE($3, salesperson),
+           notes         = COALESCE($4, notes),
+           status        = COALESCE($5, status)
+       WHERE id = $1
+       RETURNING id, code, date, customer_name, salesperson, notes, status, total`,
+      [id, customerName, salesperson, notes, status]
+    );
+    if (!inv) return res.status(404).json({ error: 'not_found' });
+    res.json(inv);
+  } catch (e) {
+    console.error(e); res.status(500).json({ error: 'failed_to_update_invoice' });
+  }
+});
+
 // start our backend
 const port = process.env.PORT || 5000;
 app.listen(port, () => {console.log(`ϟϟϟ Server started on http://localhost:${port} ϟϟϟ`)})
