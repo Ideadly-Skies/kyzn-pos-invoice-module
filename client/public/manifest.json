@@ -1,0 +1,21 @@
+{
+  "name": "KYZN POS - Invoice Management System",
+  "short_name": "KYZN POS",
+  "description": "Professional invoice management system with revenue analytics",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#7c5dfa",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/pos.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "scope": "/",
+  "lang": "en"
+}
