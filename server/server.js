@@ -436,6 +436,61 @@ app.delete('/invoices/:id', async (req, res) => {
   }
 });
 
+/* ---------- Revenue/Analytics ---------- */
+app.get('/revenue', async (req, res) => {
+  try {
+    const bucket = req.query.bucket || 'daily'; // daily, weekly, monthly
+    const limit = Math.min(toInt(req.query.limit, 30), 100);
+    
+    let sql;
+    let dateFormat;
+    let groupBy;
+    
+    switch (bucket) {
+      case 'weekly':
+        dateFormat = "DATE_TRUNC('week', date)";
+        groupBy = "DATE_TRUNC('week', date)";
+        break;
+      case 'monthly':
+        dateFormat = "DATE_TRUNC('month', date)";
+        groupBy = "DATE_TRUNC('month', date)";
+        break;
+      default: // daily
+        dateFormat = "DATE_TRUNC('day', date)";
+        groupBy = "DATE_TRUNC('day', date)";
+        break;
+    }
+    
+    sql = `
+      SELECT 
+        ${dateFormat} as period,
+        SUM(total) as revenue,
+        COUNT(*) as invoice_count,
+        AVG(total) as avg_invoice_value
+      FROM invoices 
+      WHERE status = 'paid'
+      GROUP BY ${groupBy}
+      ORDER BY period DESC
+      LIMIT $1
+    `;
+    
+    const { rows } = await pool.query(sql, [limit]);
+    
+    // Format the response
+    const data = rows.map(row => ({
+      period: row.period.toISOString().split('T')[0], // YYYY-MM-DD format
+      revenue: Number(row.revenue || 0),
+      invoiceCount: Number(row.invoice_count || 0),
+      avgInvoiceValue: Number(row.avg_invoice_value || 0)
+    })).reverse(); // Reverse to get chronological order
+    
+    res.json({ data, bucket, total: rows.length });
+  } catch (e) {
+    console.error('Revenue query error:', e);
+    res.status(500).json({ error: 'failed_to_fetch_revenue' });
+  }
+});
+
 // start our backend
 const port = process.env.PORT || 5000;
 app.listen(port, () => {console.log(`ϟϟϟ Server started on http://localhost:${port} ϟϟϟ`)})
