@@ -4,7 +4,7 @@ import AddItem from './AddItem'
 import { v4 as uuidv4 } from "uuid";
 import { useDispatch } from 'react-redux';
 import { loadInvoices, filterInvoice } from '../redux/invoiceSlice';
-import { createInvoice as apiCreateInvoice } from '../api/invoices';
+import { createInvoice as apiCreateInvoice, patchInvoice } from '../api/invoices';
 import {
   validateSenderStreetAddress, validateSenderPostCode, validateSenderCity,
   validateCLientEmail, validateCLientName, validateClientCity, validateClientPostCode,
@@ -73,9 +73,42 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
 
   const onSubmit = async () => {
     if (type === 'edit') {
-      // TODO: Implement edit functionality
-      console.log('Edit functionality not yet implemented');
-      setOpenCreateInvoice(false)
+      console.log("Editing existing invoice...");
+      
+      const editPayload = {
+        customerName: clientName,
+        salesperson,
+        notes: description || '',
+        status,
+      };
+
+      console.log("Edit payload to send:", JSON.stringify(editPayload, null, 2));
+
+      try {
+        console.log("Sending PATCH request to API...");
+        const result = await patchInvoice(invoice.id, editPayload);
+        console.log("Invoice updated successfully:", result);
+        
+        console.log("Reloading invoices...");
+        await dispatch(loadInvoices({ limit: 10 }));
+        
+        console.log("Applying filter...");
+        dispatch(filterInvoice({ status: filterValue }));
+        
+        console.log("Closing modal...");
+        setOpenCreateInvoice(false);
+        
+        // Optionally show success message
+        alert('Invoice updated successfully!');
+      } catch (e) {
+        console.error("Failed to update invoice:", e);
+        console.error("Error details:", {
+          message: e.message,
+          stack: e.stack,
+          payload: editPayload
+        });
+        alert(`Failed to update invoice: ${e.message}`);
+      }
     } else {
       console.log("Creating new invoice...");
 
@@ -140,6 +173,8 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
     setSenderStreet(invoice.senderAddress.street)
     setSenderCountry(invoice.senderAddress.country)
     setSenderPostCode(invoice.senderAddress.postCode)
+    setSalesperson(invoice.salesperson || '')
+    setStatus(invoice.status || 'pending')
     setItem(updatedItemsArray)
     setIsFirstLoad(false)
   }
@@ -154,6 +189,13 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
 
   function validator() {
     const salesValid = salesperson && salesperson.trim().length > 0;
+    
+    // For edit mode, only validate the fields that can be updated
+    if (type === 'edit') {
+      return validateCLientName(clientName) && salesValid;
+    }
+    
+    // For create mode, validate all fields
     if (
       validateSenderStreetAddress(senderStreet) && validateSenderPostCode(senderPostCode) &&
       validateSenderCity(senderCity) && validateCLientEmail(clientEmail) &&
@@ -167,6 +209,14 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
 
   function debugValidation() {
     const salesValid = salesperson && salesperson.trim().length > 0;
+    
+    if (type === 'edit') {
+      return {
+        clientName: validateCLientName(clientName),
+        salesperson: salesValid,
+      };
+    }
+    
     return {
       senderStreet: validateSenderStreetAddress(senderStreet),
       senderPostCode: validateSenderPostCode(senderPostCode),
@@ -216,6 +266,14 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                 }}
             >
                 {/* Bill From */}
+                {type === 'edit' && (
+                    <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                            <strong>Note:</strong> In edit mode, only Customer Name, Salesperson, Status, and Description can be modified due to backend limitations.
+                        </p>
+                    </div>
+                )}
+                
                 <h1 className=' text-[#7c5dfa] mb-4 font-medium'>
                     Bill From
                 </h1>
@@ -223,28 +281,53 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                 <div className=' grid grid-cols-3 mx-1  space-y-4 '>
                     <div className=' flex flex-col col-span-3'>
                         <label className=' text-gray-400 font-light'>
-                            Street Address
+                            Street Address {type === 'edit' && <span className="text-xs">(Read-only)</span>}
                         </label>
-                        <input value={senderStreet} id='senderStreet' onChange={(e) => setSenderStreet(e.target.value)} type='text' className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none  dark:border-gray-800 ${isValidatorActive && !validateSenderStreetAddress(senderStreet) && ' border-red-500 dark:border-red-500 outline-red-500 border-2'}`} />
+                        <input 
+                            value={senderStreet} 
+                            id='senderStreet' 
+                            onChange={(e) => setSenderStreet(e.target.value)} 
+                            type='text' 
+                            disabled={type === 'edit'}
+                            className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none  dark:border-gray-800 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderStreetAddress(senderStreet) && ' border-red-500 dark:border-red-500 outline-red-500 border-2'}`} 
+                        />
                     </div>
 
                     <div className=' flex flex-col mr-4 col-span-1'>
                         <label className=' text-gray-400 font-light'>
-                            City
+                            City {type === 'edit' && <span className="text-xs">(Read-only)</span>}
                         </label>
-                        <input type='text' value={senderCity} onChange={(e) => setSenderCity(e.target.value)} className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 border-gray-300 ${isValidatorActive && !validateSenderCity(senderCity) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} />
+                        <input 
+                            type='text' 
+                            value={senderCity} 
+                            onChange={(e) => setSenderCity(e.target.value)} 
+                            disabled={type === 'edit'}
+                            className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 border-gray-300 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderCity(senderCity) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} 
+                        />
                     </div>
                     <div className=' flex flex-col mr-4 col-span-1'>
                         <label className=' text-gray-400 font-light'>
-                            Post Code
+                            Post Code {type === 'edit' && <span className="text-xs">(Read-only)</span>}
                         </label>
-                        <input type='text' value={senderPostCode} onChange={(e) => setSenderPostCode(e.target.value)} className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg focus:outline-none  focus:outline-purple-400 border-gray-300 ${isValidatorActive && !validateSenderPostCode(senderPostCode) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} />
+                        <input 
+                            type='text' 
+                            value={senderPostCode} 
+                            onChange={(e) => setSenderPostCode(e.target.value)} 
+                            disabled={type === 'edit'}
+                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg focus:outline-none  focus:outline-purple-400 border-gray-300 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderPostCode(senderPostCode) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} 
+                        />
                     </div>
                     <div className=' flex flex-col col-span-1'>
                         <label className=' text-gray-400 font-light'>
-                            Country
+                            Country {type === 'edit' && <span className="text-xs">(Read-only)</span>}
                         </label>
-                        <input type='text' value={senderCountry} onChange={(e) => setSenderCountry(e.target.value)} className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 ${isValidatorActive && !validateSenderCountry(senderCountry) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} border-gray-300 dark:border-gray-800`} />
+                        <input 
+                            type='text' 
+                            value={senderCountry} 
+                            onChange={(e) => setSenderCountry(e.target.value)} 
+                            disabled={type === 'edit'}
+                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderCountry(senderCountry) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} border-gray-300 dark:border-gray-800`} 
+                        />
                     </div>
                 </div>
 
@@ -263,9 +346,15 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
 
                     <div className=' flex flex-col   col-span-3'>
                         <label className=' text-gray-400 font-light'>
-                            Client Email
+                            Client Email {type === 'edit' && <span className="text-xs">(Read-only)</span>}
                         </label>
-                        <input type='text' value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none ${isValidatorActive && !validateCLientEmail(clientEmail) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'}   dark:border-gray-800`} />
+                        <input 
+                            type='text' 
+                            value={clientEmail} 
+                            onChange={(e) => setClientEmail(e.target.value)} 
+                            disabled={type === 'edit'}
+                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateCLientEmail(clientEmail) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'}   dark:border-gray-800`} 
+                        />
                     </div>
 
                     <div className=' flex flex-col col-span-3'>
@@ -350,19 +439,28 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                     </div>
 
                     <h2 className='text-2xl text-gray-500 mt-10 '>Item List</h2>
+                    {type === 'edit' && (
+                        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-600 rounded-lg">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Items cannot be modified in edit mode due to backend limitations.
+                            </p>
+                        </div>
+                    )}
                     {item.map((itemDetails, index) => (
-                        <div key={itemDetails.id} className='border-b pb-2 border-gray-300 mb-4 '>
+                        <div key={itemDetails.id} className={`border-b pb-2 border-gray-300 mb-4 ${type === 'edit' ? 'opacity-50 pointer-events-none' : ''}`}>
                         <AddItem isValidatorActive={isValidatorActive} handelOnChange={handelOnChange} setItem={setItem} onDelete={onDelete} itemDetails={itemDetails} />
                         </div>
                     ))}
 
-                    <button
-                        onClick={() => {
-                        setItem((state) => [...state, { name: "", quantity: 1, price: 0, total: 0, id: uuidv4() }])
-                    }}
-                        className='bg-gray-200 hover:opacity-80 mx-auto py-2 items-center dark:text-white dark:bg-[#252945] justify-center rounded-xl w-full mt-6'>
-                        + Add New Item
-                    </button>
+                    {type !== 'edit' && (
+                        <button
+                            onClick={() => {
+                            setItem((state) => [...state, { name: "", quantity: 1, price: 0, total: 0, id: uuidv4() }])
+                        }}
+                            className='bg-gray-200 hover:opacity-80 mx-auto py-2 items-center dark:text-white dark:bg-[#252945] justify-center rounded-xl w-full mt-6'>
+                            + Add New Item
+                        </button>
+                    )}
             </form>
 
                     <div className='flex justify-between'>
@@ -377,7 +475,7 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                             type="submit"
                             form="invoice-form"
                             className='text-white hover:opacity-80 mx-auto py-4 bg-[#7c5dfa] px-8 rounded-full '>
-                            Save & Send
+                            {type === 'edit' ? 'Update Invoice' : 'Save & Send'}
                         </button>
                     </div>
         </motion.div>

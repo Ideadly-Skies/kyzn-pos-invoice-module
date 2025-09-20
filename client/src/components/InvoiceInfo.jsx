@@ -13,9 +13,10 @@ import {
   selectInvoicesLoading,
   selectInvoicesError,
   deleteInvoice,
+  updateInvoiceStatus,
 } from '../redux/invoiceSlice';
 
-import { deleteInvoiceById } from '../api/invoices';
+import { deleteInvoiceById, updateInvoiceStatus as apiUpdateInvoiceStatus } from '../api/invoices';
 import formatDate from '../functions/formatDate';
 import DeleteModal from './DeleteModal';
 import CreateInvoice from './CreateInvoice';
@@ -33,6 +34,7 @@ function InvoiceInfo() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const invoiceId = location.search.substring(1);
 
@@ -48,9 +50,25 @@ function InvoiceInfo() {
     if (invoiceId && !invoice) dispatch(loadInvoiceById(invoiceId));
   }, [dispatch, invoiceId, invoice]);
 
-  const onMakePaidClick = () => {
-    // keep local behavior for now; PATCH can be wired later
-    dispatch(getInvoiceById({ id: invoiceId }));
+  const onMakePaidClick = async () => {
+    try {
+      setIsUpdatingStatus(true);
+      console.log(`Updating invoice ${invoiceId} status to paid...`);
+      
+      // Call the API to update the invoice status
+      await apiUpdateInvoiceStatus(invoiceId, 'paid');
+      console.log(`Invoice ${invoiceId} status updated successfully on server`);
+      
+      // Update Redux state
+      dispatch(updateInvoiceStatus({ id: invoiceId, status: 'paid' }));
+      console.log(`Invoice ${invoiceId} status updated in Redux state`);
+      
+    } catch (error) {
+      console.error('Failed to update invoice status:', error);
+      alert(`Failed to update invoice status: ${error.message}`);
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
   const onDeleteButtonClick = async () => {
@@ -126,9 +144,14 @@ function InvoiceInfo() {
               {invoice.status === 'pending' && (
                 <button
                   onClick={onMakePaidClick}
-                  className="ml-3 text-center text-white bg-[#7c5dfa] hover:opacity-80 p-3 px-7 rounded-full"
+                  disabled={isUpdatingStatus}
+                  className={`ml-3 text-center text-white p-3 px-7 rounded-full ${
+                    isUpdatingStatus 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-[#7c5dfa] hover:opacity-80'
+                  }`}
                 >
-                  Make as Paid
+                  {isUpdatingStatus ? 'Updating...' : 'Mark as Paid'}
                 </button>
               )}
             </div>
