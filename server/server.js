@@ -184,6 +184,41 @@ app.patch('/invoices/:id', async (req, res) => {
   }
 });
 
+app.delete('/invoices/:id', async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'invalid_id', detail: 'id must be a positive integer' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query('DELETE FROM invoice_items WHERE invoice_id = $1', [id]);
+
+    const { rowCount, rows } = await client.query(
+      'DELETE FROM invoices WHERE id = $1 RETURNING id, code, date',
+      [id]
+    );
+
+    await client.query('COMMIT');
+
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'not_found', detail: `invoice ${id} does not exist` });
+    }
+
+    // return visible confirmation
+    return res.status(200).json({ deleted: true, invoice: rows[0] });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error(e);
+    return res.status(500).json({ error: 'failed_to_delete_invoice' });
+  } finally {
+    client.release();
+  }
+});
+
 // start our backend
 const port = process.env.PORT || 5000;
 app.listen(port, () => {console.log(`ϟϟϟ Server started on http://localhost:${port} ϟϟϟ`)})
