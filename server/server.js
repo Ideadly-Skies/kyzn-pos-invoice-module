@@ -91,6 +91,41 @@ app.get('/invoices', async (req, res) => {
   }
 });
 
+// GET /invoices/:id  → return one invoice with its items
+app.get('/invoices/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'invalid_id', detail: 'id must be a positive integer' });
+    }
+
+    const { rows: invRows } = await pool.query(
+      `SELECT id, code, date, customer_name, salesperson, notes, status, total
+       FROM invoices
+       WHERE id = $1`,
+      [id]
+    );
+    if (invRows.length === 0) return res.status(404).json({ error: 'not_found' });
+
+    const inv = invRows[0];
+
+    const { rows: items } = await pool.query(
+      `SELECT id, product_id, name, quantity, unit_price, line_total
+       FROM invoice_items
+       WHERE invoice_id = $1
+       ORDER BY id ASC`,
+      [id]
+    );
+
+    inv.items = items;
+    return res.json(inv);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'failed_to_fetch_invoice' });
+  }
+});
+
+
 app.post('/invoices', async (req, res) => {
   const client = await pool.connect();
   try {

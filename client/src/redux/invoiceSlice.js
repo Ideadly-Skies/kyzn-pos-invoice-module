@@ -1,6 +1,9 @@
 // src/redux/invoiceSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { fetchInvoices as apiFetchInvoices } from '../api/invoices';
+import {
+  fetchInvoices as apiFetchInvoices,
+  fetchInvoiceById as apiFetchInvoiceById,
+} from '../api/invoices';
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Async thunks - loadInvoices from the backend
@@ -9,6 +12,13 @@ export const loadInvoices = createAsyncThunk(
   'invoices/loadInvoices',
   async ({ cursor = null, limit = 10 } = {}) => {
     return await apiFetchInvoices({ cursor, limit });
+  }
+);
+
+export const loadInvoiceById = createAsyncThunk(
+  'invoices/loadInvoiceById',
+  async (id) => {
+    return await apiFetchInvoiceById(id);
   }
 );
 
@@ -91,7 +101,25 @@ const slice = createSlice({
       .addCase(loadInvoices.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error?.message || 'Failed to load invoices';
-      });
+      })
+      .addCase(loadInvoiceById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(loadInvoiceById.fulfilled, (state, action) => {
+        const inv = action.payload;
+        // upsert into the list
+        const map = new Map(state.allInvoice.map(i => [String(i.id), i]));
+        map.set(String(inv.id), inv);
+        state.allInvoice = Array.from(map.values());
+        state.filteredInvoice = state.allInvoice;
+        state.invoiceById = inv;
+        state.loading = false;
+      })
+      .addCase(loadInvoiceById.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error?.message || 'Failed to load invoice';
+      })
   },
 });
 
