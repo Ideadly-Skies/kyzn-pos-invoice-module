@@ -164,14 +164,14 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
             };
 
             try {
-                console.log("Original invoice:", invoice);
-                console.log("Edit payload being sent:", editPayload);
+                // console.log("Original invoice:", invoice);
+                // console.log("Edit payload being sent:", editPayload);
                 const result = await patchInvoice(invoice.id, editPayload);
-                console.log("Patch result:", result);
+                // console.log("Patch result:", result);
                 
                 // The result is already adapted by patchInvoice, just ensure it has the original items
                 const adaptedResult = { ...result, items: invoice.items || [] };
-                console.log("Final adapted result:", adaptedResult);
+                // console.log("Final adapted result:", adaptedResult);
                 
                 // Update the specific invoice in Redux
                 dispatch(updateInvoice(adaptedResult));
@@ -332,14 +332,14 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                 className='overflow-y-scroll scrollbar-hide my-14'
                 onSubmit={(e) => {
                     e.preventDefault();
-                    console.log("Form submission triggered");
+                    // console.log("Form submission triggered");
                     setIsValidatorActive(true);
                     const ok = validator();
                     if (!ok) {
-                        console.warn('Form validation failed:', debugValidation());
+                        // console.warn('Form validation failed:', debugValidation());
                         return;
                     }
-                    console.log("Form validation passed, calling onSubmit");
+                    // console.log("Form validation passed, calling onSubmit");
                     onSubmit();
                 }}
             >

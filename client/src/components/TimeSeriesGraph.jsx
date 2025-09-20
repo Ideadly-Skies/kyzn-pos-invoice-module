@@ -44,7 +44,7 @@ function TimeSeriesGraph() {
         setViewWindow({ start: 0, end: Math.min(20, newData.length) });
       }
     } catch (err) {
-      console.error('Failed to load revenue data:', err);
+      // console.error('Failed to load revenue data:', err);
       setError(err.message);
     } finally {
       setLoading(false);

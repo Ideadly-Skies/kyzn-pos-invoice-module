@@ -70,16 +70,16 @@ function InvoiceInfo() {
   const onMakePaidClick = async () => {
     try {
         setIsUpdatingStatus(true);
-        console.log(`Updating invoice ${invoiceId} status to paid...`);
+        // console.log(`Updating invoice ${invoiceId} status to paid...`);
         
         // Call the API to update the invoice status
         const result = await apiUpdateInvoiceStatus(invoiceId, 'paid');
-        console.log(`Invoice ${invoiceId} status updated successfully on server`, result);
+        // console.log(`Invoice ${invoiceId} status updated successfully on server`, result);
         
         // Update Redux state with the status change
         dispatch(updateInvoiceStatus({ id: invoiceId, status: 'paid' }));
         
-        console.log(`Invoice ${invoiceId} status updated in Redux state`);
+        // console.log(`Invoice ${invoiceId} status updated in Redux state`);
         
         Swal.fire({
             title: `Payment Success!`,
@@ -88,7 +88,7 @@ function InvoiceInfo() {
         });
 
     } catch (error) {
-      console.error('Failed to update invoice status:', error);
+      // console.error('Failed to update invoice status:', error);
       Swal.fire({
         title: 'Error!',
         text: `Failed to update invoice status: ${error.message}`,
@@ -103,19 +103,19 @@ function InvoiceInfo() {
   const onDeleteButtonClick = async () => {
     try {
       setIsDeleting(true);
-      console.log(`Deleting invoice ${invoiceId}...`);
+      // console.log(`Deleting invoice ${invoiceId}...`);
       
       // Set the isDeleted flag immediately to prevent any API calls
       setIsDeleted(true);
       
       // Call the API to delete the invoice
       await deleteInvoiceById(invoiceId);
-      console.log(`Invoice ${invoiceId} deleted successfully from server`);
+      // console.log(`Invoice ${invoiceId} deleted successfully from server`);
       
       // Update Redux state to remove the invoice and clear current invoice
       dispatch(deleteInvoice({ id: invoiceId }));
       dispatch(clearCurrentInvoice());
-      console.log(`Invoice ${invoiceId} removed from Redux state`);
+      // console.log(`Invoice ${invoiceId} removed from Redux state`);
       
       // Close the delete modal
       setIsDeleteModalOpen(false);
@@ -135,9 +135,9 @@ function InvoiceInfo() {
         });
       }, 100);
       
-      console.log('Invoice deletion completed successfully');
+      // console.log('Invoice deletion completed successfully');
     } catch (error) {
-      console.error('Failed to delete invoice:', error);
+      // console.error('Failed to delete invoice:', error);
       setIsDeleted(false); // Reset the flag if deletion failed
       Swal.fire({
         title: 'Error!',

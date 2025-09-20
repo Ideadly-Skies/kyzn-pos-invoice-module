@@ -49,7 +49,8 @@ app.get('/products', async (req, res) => {
 
     res.json({ items: rows, page, totalPages: Math.max(1, Math.ceil(cntRows[0].c / limit)) });
   } catch (e) {
-    console.error(e); res.status(500).json({ error: 'failed_to_fetch_products' });
+    // console.error(e); 
+    res.status(500).json({ error: 'failed_to_fetch_products' });
   }
 });
 
@@ -86,7 +87,8 @@ app.get('/invoices', async (req, res) => {
 
     res.json({ items, nextCursor: hasMore ? items[items.length - 1].id : null });
   } catch (e) {
-    console.error(e); res.status(500).json({ error: 'failed_to_fetch_invoices' });
+    // console.error(e); 
+    res.status(500).json({ error: 'failed_to_fetch_invoices' });
   }
 });
 
@@ -117,7 +119,7 @@ app.get('/invoices/:id', async (req, res) => {
     inv.items = items;
     return res.json(inv);
   } catch (e) {
-    console.error(e);
+    // console.error(e);
     return res.status(500).json({ error: 'failed_to_fetch_invoice' });
   }
 });
@@ -127,7 +129,7 @@ app.post('/invoices', async (req, res) => {
   const client = await pool.connect();
   try {
     const body = req.body || {};
-    console.log('Creating invoice with payload:', JSON.stringify(body, null, 2));
+    // console.log('Creating invoice with payload:', JSON.stringify(body, null, 2));
     
     // minimal validation per brief
     const missing = ['code','date','customerName','salesperson','status','items']
@@ -177,7 +179,7 @@ app.post('/invoices', async (req, res) => {
       total
     ]);
 
-    console.log('Created invoice:', inv);
+    // console.log('Created invoice:', inv);
 
     const itemSql = `
       INSERT INTO invoice_items (invoice_id, product_id, name, quantity, unit_price, line_total)
@@ -211,7 +213,7 @@ app.post('/invoices', async (req, res) => {
     res.status(201).json({ ...inv, items });
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('Error creating invoice:', e); 
+    // console.error('Error creating invoice:', e); 
     res.status(500).json({ error: 'failed_to_create_invoice', details: e.message });
   } finally {
     client.release();
@@ -222,7 +224,7 @@ app.patch('/invoices/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     const body = req.body || {};
-    console.log('Updating invoice', id, 'with payload:', JSON.stringify(body, null, 2));
+    // console.log('Updating invoice', id, 'with payload:', JSON.stringify(body, null, 2));
     
     // Build dynamic SQL for only provided fields
     const updates = [];
@@ -337,7 +339,7 @@ app.patch('/invoices/:id', async (req, res) => {
       
       // Handle items update
       if (hasItemsUpdate) {
-        console.log('Updating items for invoice:', id, 'New items:', body.items);
+        // console.log('Updating items for invoice:', id, 'New items:', body.items);
         
         // Delete existing items
         await client.query('DELETE FROM invoice_items WHERE invoice_id = $1', [id]);
@@ -382,21 +384,21 @@ app.patch('/invoices/:id', async (req, res) => {
         );
         inv = finalInv;
         
-        console.log('Updated items:', items);
-        console.log('New total:', total);
+        // console.log('Updated items:', items);
+        // console.log('New total:', total);
       }
       
       await client.query('COMMIT');
       res.json(inv);
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error('Error in PATCH transaction:', e);
+      // console.error('Error in PATCH transaction:', e);
       throw e;
     } finally {
       client.release();
     }
   } catch (e) {
-    console.error('Error updating invoice:', e); 
+    // console.error('Error updating invoice:', e); 
     res.status(500).json({ error: 'failed_to_update_invoice', details: e.message });
   }
 });
@@ -429,7 +431,7 @@ app.delete('/invoices/:id', async (req, res) => {
     return res.status(200).json({ deleted: true, invoice: rows[0] });
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error(e);
+    // console.error(e);
     return res.status(500).json({ error: 'failed_to_delete_invoice' });
   } finally {
     client.release();
@@ -486,11 +488,13 @@ app.get('/revenue', async (req, res) => {
     
     res.json({ data, bucket, total: rows.length });
   } catch (e) {
-    console.error('Revenue query error:', e);
+    // console.error('Revenue query error:', e);
     res.status(500).json({ error: 'failed_to_fetch_revenue' });
   }
 });
 
 // start our backend
 const port = process.env.PORT || 5000;
-app.listen(port, () => {console.log(`ϟϟϟ Server started on http://localhost:${port} ϟϟϟ`)})
+app.listen(port, () => {
+  // console.log(`ϟϟϟ Server started on http://localhost:${port} ϟϟϟ`)
+})

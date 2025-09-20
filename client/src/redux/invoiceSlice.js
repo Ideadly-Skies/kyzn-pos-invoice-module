@@ -74,25 +74,25 @@ const slice = createSlice({
       const updatedInvoice = action.payload;
       const id = String(updatedInvoice.id);
       
-      console.log('Redux updateInvoice action called with:', updatedInvoice);
+      // console.log('Redux updateInvoice action called with:', updatedInvoice);
       
       // Update in allInvoice array
       const targetIndex = state.allInvoice.findIndex((i) => String(i.id) === id);
       if (targetIndex !== -1) {
         state.allInvoice[targetIndex] = updatedInvoice;
-        console.log('Updated invoice in allInvoice array at index:', targetIndex);
+        // console.log('Updated invoice in allInvoice array at index:', targetIndex);
       }
 
       // Update in filteredInvoice array
       const filteredIndex = state.filteredInvoice.findIndex((i) => String(i.id) === id);
       if (filteredIndex !== -1) {
         state.filteredInvoice[filteredIndex] = updatedInvoice;
-        console.log('Updated invoice in filteredInvoice array at index:', filteredIndex);
+        // console.log('Updated invoice in filteredInvoice array at index:', filteredIndex);
       }
 
       // Update invoiceById if it's the current invoice
       if (state.invoiceById && String(state.invoiceById.id) === id) {
-        console.log('Updating current invoiceById from:', state.invoiceById, 'to:', updatedInvoice);
+        // console.log('Updating current invoiceById from:', state.invoiceById, 'to:', updatedInvoice);
         state.invoiceById = updatedInvoice;
       }
     },

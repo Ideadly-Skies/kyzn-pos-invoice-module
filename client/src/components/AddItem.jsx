@@ -49,7 +49,7 @@ function AddItem({ itemDetails, setItem, isValidatorActive, onDelete, handelOnCh
           const items = await searchProducts({ query: term, limit: 8, page: 1 });
           setResults(items);
         } catch (e) {
-          console.error(e);
+          // console.error(e);
           setResults([]);
         } finally {
           setLoading(false);

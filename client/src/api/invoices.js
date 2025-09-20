@@ -81,7 +81,7 @@ export async function createInvoice(inv) {
 // patch invoice
 export async function patchInvoice(id, patch) {
   const payload = adaptPatchToApi(patch);
-  console.log('PATCH payload being sent:', JSON.stringify(payload, null, 2));
+  // console.log('PATCH payload being sent:', JSON.stringify(payload, null, 2));
 
   const res = await fetch(`${API_URL}/invoices/${id}`, {
     method: 'PATCH',
@@ -92,7 +92,7 @@ export async function patchInvoice(id, patch) {
   if (!res.ok) throw new Error(`PATCH /invoices/${id} failed: ${res.status}`);
 
   const updated = await res.json();
-  console.log('PATCH response received:', JSON.stringify(updated, null, 2));
+  // console.log('PATCH response received:', JSON.stringify(updated, null, 2));
   return adaptInvoiceFromApi({ ...updated, items: patch.items ?? [] });
 }
 
