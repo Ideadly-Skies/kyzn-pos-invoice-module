@@ -16,6 +16,11 @@ const pool = new Pool({
   connectionTimeoutMillis: 5_000,
 });
 
+/* ---------- Health Check ---------- */
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 /* ---------- tiny helpers ---------- */
 function toInt(v, d) { const n = Number(v); return Number.isFinite(n) ? n : d; }
 function bucketView(bucket) {
