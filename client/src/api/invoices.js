@@ -41,10 +41,26 @@ export async function createInvoice(inv) {
   const payload = {
     code: inv.code,
     date: inv.date, // ISO string or yyyy-mm-dd is fine; backend casts to Date
+    paymentTerms: inv.paymentTerms || 30,
     customerName: inv.customerName,
+    clientEmail: inv.clientEmail || null,
+    
+    // Client address
+    clientStreet: inv.clientAddress?.street || null,
+    clientCity: inv.clientAddress?.city || null,
+    clientPostCode: inv.clientAddress?.postCode || null,
+    clientCountry: inv.clientAddress?.country || null,
+    
+    // Sender address
+    senderStreet: inv.senderAddress?.street || null,
+    senderCity: inv.senderAddress?.city || null,
+    senderPostCode: inv.senderAddress?.postCode || null,
+    senderCountry: inv.senderAddress?.country || null,
+    
     salesperson: inv.salesperson,
     status: inv.status,      // 'paid' | 'pending' | 'draft'
     notes: inv.notes || null,
+    description: inv.description || null,
     items: (inv.items || []).map(it => ({
       productId: it.productId ?? undefined,
       name: it.name ?? undefined,
@@ -65,6 +81,7 @@ export async function createInvoice(inv) {
 // patch invoice
 export async function patchInvoice(id, patch) {
   const payload = adaptPatchToApi(patch);
+  console.log('PATCH payload being sent:', JSON.stringify(payload, null, 2));
 
   const res = await fetch(`${API_URL}/invoices/${id}`, {
     method: 'PATCH',
@@ -75,6 +92,7 @@ export async function patchInvoice(id, patch) {
   if (!res.ok) throw new Error(`PATCH /invoices/${id} failed: ${res.status}`);
 
   const updated = await res.json();
+  console.log('PATCH response received:', JSON.stringify(updated, null, 2));
   return adaptInvoiceFromApi({ ...updated, items: patch.items ?? [] });
 }
 
@@ -100,14 +118,25 @@ export function adaptInvoiceFromApi(inv) {
     id: String(inv.id),
     code: inv.code,
     createdAt: inv.date,                 
-    paymentDue: inv.date,               
-    description: inv.notes || '',
+    paymentDue: inv.payment_due || inv.date, // Use payment_due from DB or fallback to date
+    paymentTerms: inv.payment_terms || 30,
+    description: inv.description || inv.notes || '',
     clientName: inv.customer_name,       
-    clientEmail: inv.customer_email || '', 
+    clientEmail: inv.client_email || '', 
     salesperson: inv.salesperson ?? '',
     status: inv.status,
-    senderAddress: inv.senderAddress || { street: '', city: '', postCode: '', country: '' },
-    clientAddress: inv.clientAddress || { street: '', city: '', postCode: '', country: '' },
+    senderAddress: {
+      street: inv.sender_street || '',
+      city: inv.sender_city || '',
+      postCode: inv.sender_post_code || '',
+      country: inv.sender_country || ''
+    },
+    clientAddress: {
+      street: inv.client_street || '',
+      city: inv.client_city || '',
+      postCode: inv.client_post_code || '',
+      country: inv.client_country || ''
+    },
     total: Number(inv.total ?? 0),
     items: (inv.items || []).map(adaptItemFromApi),
   };
@@ -148,9 +177,32 @@ function adaptInvoiceToCreate(inv) {
 function adaptPatchToApi(patch) {
   const out = {};
   if ('customerName' in patch) out.customerName = patch.customerName;
+  if ('clientEmail' in patch) out.clientEmail = patch.clientEmail;
   if ('salesperson' in patch) out.salesperson = patch.salesperson;
   if ('notes' in patch) out.notes = patch.notes;
+  if ('description' in patch) out.description = patch.description;
   if ('status' in patch) out.status = patch.status;
+  if ('paymentTerms' in patch) out.paymentTerms = patch.paymentTerms;
+  if ('date' in patch) out.date = patch.date;
+  
+  // Include items for editing
+  if ('items' in patch) out.items = patch.items;
+  
+  // Address fields
+  if ('clientAddress' in patch) {
+    if (patch.clientAddress?.street !== undefined) out.clientStreet = patch.clientAddress.street;
+    if (patch.clientAddress?.city !== undefined) out.clientCity = patch.clientAddress.city;
+    if (patch.clientAddress?.postCode !== undefined) out.clientPostCode = patch.clientAddress.postCode;
+    if (patch.clientAddress?.country !== undefined) out.clientCountry = patch.clientAddress.country;
+  }
+  
+  if ('senderAddress' in patch) {
+    if (patch.senderAddress?.street !== undefined) out.senderStreet = patch.senderAddress.street;
+    if (patch.senderAddress?.city !== undefined) out.senderCity = patch.senderAddress.city;
+    if (patch.senderAddress?.postCode !== undefined) out.senderPostCode = patch.senderAddress.postCode;
+    if (patch.senderAddress?.country !== undefined) out.senderCountry = patch.senderAddress.country;
+  }
+  
   return out;
 }
 

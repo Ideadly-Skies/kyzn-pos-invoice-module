@@ -215,7 +215,10 @@ function InvoiceInfo() {
                   <span className="text-[#7e88c3]">#</span>
                   {invoice.id}
                 </h1>
-                <p className="text-sm text-gray-500">{invoice.clientName}</p>
+                <p className="text-sm text-gray-500">{invoice.description || 'No description'}</p>
+                {invoice.salesperson && (
+                  <p className="text-sm text-gray-500 mt-1">Sales: {invoice.salesperson}</p>
+                )}
               </div>
               <div className="mt-4 md:mt-0 text-left text-gray-400 text-sm md:text-right flex flex-col items-center">
                 <p>{sender.street}</p>
@@ -231,24 +234,40 @@ function InvoiceInfo() {
                   <h3 className="text-gray-400 font-thin">Invoice Date</h3>
                   <h1 className="text-lg font-semibold dark:text-white">{formatDate(invoice.createdAt)}</h1>
                 </div>
-                <div>
+                <div className="mt-6">
                   <h3 className="text-gray-400 font-thin">Payment Due</h3>
                   <h1 className="dark:text-white text-lg font-semibold">{formatDate(invoice.paymentDue)}</h1>
                 </div>
+                {invoice.paymentTerms && (
+                  <div className="mt-6">
+                    <h3 className="text-gray-400 font-thin">Payment Terms</h3>
+                    <h1 className="dark:text-white text-lg font-semibold">{invoice.paymentTerms} day{invoice.paymentTerms !== 1 ? 's' : ''}</h1>
+                  </div>
+                )}
               </div>
 
               <div>
                 <p className="text-gray-400 font-thin">Bill to</p>
                 <h1 className="dark:text-white text-lg font-semibold">{invoice.clientName}</h1>
-                <p className="text-gray-400 font-thin">{client.street}</p>
-                <p className="text-gray-400 font-thin">{client.city}</p>
-                <p className="text-gray-400 font-thin">{client.postCode}</p>
-                <p className="text-gray-400 font-thin">{client.country}</p>
+                <div className="mt-2">
+                  <p className="text-gray-400 font-thin">{client.street}</p>
+                  <p className="text-gray-400 font-thin">{client.city}</p>
+                  <p className="text-gray-400 font-thin">{client.postCode}</p>
+                  <p className="text-gray-400 font-thin">{client.country}</p>
+                </div>
               </div>
 
               <div className="mt-8 md:mt-0">
                 <p className="text-gray-400 font-thin">Sent to</p>
                 <h1 className="dark:text-white text-lg font-semibold">{invoice.clientEmail}</h1>
+                <div className="mt-4">
+                  <p className="text-gray-400 font-thin">Billing Address</p>
+                  <div className="mt-1">
+                    <p className="dark:text-white text-sm">{client.street}</p>
+                    <p className="dark:text-white text-sm">{client.city}, {client.postCode}</p>
+                    <p className="dark:text-white text-sm">{client.country}</p>
+                  </div>
+                </div>
               </div>
             </div>
 

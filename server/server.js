@@ -64,8 +64,7 @@ app.get('/invoices', async (req, res) => {
     if (cursor) { where = `WHERE id > $1`; args.push(cursor); }
 
     const { rows } = await pool.query(
-      `SELECT id, code, date, customer_name, salesperson, notes, status, total
-       FROM invoices
+      `SELECT * FROM invoices
        ${where}
        ORDER BY id ASC
        LIMIT $${args.length + 1}`,
@@ -100,9 +99,7 @@ app.get('/invoices/:id', async (req, res) => {
     }
 
     const { rows: invRows } = await pool.query(
-      `SELECT id, code, date, customer_name, salesperson, notes, status, total
-       FROM invoices
-       WHERE id = $1`,
+      `SELECT * FROM invoices WHERE id = $1`,
       [id]
     );
     if (invRows.length === 0) return res.status(404).json({ error: 'not_found' });
@@ -130,6 +127,8 @@ app.post('/invoices', async (req, res) => {
   const client = await pool.connect();
   try {
     const body = req.body || {};
+    console.log('Creating invoice with payload:', JSON.stringify(body, null, 2));
+    
     // minimal validation per brief
     const missing = ['code','date','customerName','salesperson','status','items']
       .filter(k => body[k] == null || (k === 'items' && !Array.isArray(body[k]) || (Array.isArray(body[k]) && !body[k].length)));
@@ -145,20 +144,40 @@ app.post('/invoices', async (req, res) => {
       total += unit * qty;
     }
 
+    // Updated SQL to include all new fields
     const invSql = `
-      INSERT INTO invoices (code, date, customer_name, salesperson, notes, status, total)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-      RETURNING id, code, date, customer_name, salesperson, notes, status, total
+      INSERT INTO invoices (
+        code, date, payment_terms, customer_name, client_email,
+        client_street, client_city, client_post_code, client_country,
+        sender_street, sender_city, sender_post_code, sender_country,
+        salesperson, notes, status, description, total
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      RETURNING *
     `;
+    
     const { rows: [inv] } = await client.query(invSql, [
       body.code,
       new Date(body.date),
+      body.paymentTerms || 30,
       body.customerName,
+      body.clientEmail || null,
+      body.clientAddress?.street || body.clientStreet || null,
+      body.clientAddress?.city || body.clientCity || null,
+      body.clientAddress?.postCode || body.clientPostCode || null,
+      body.clientAddress?.country || body.clientCountry || null,
+      body.senderAddress?.street || body.senderStreet || null,
+      body.senderAddress?.city || body.senderCity || null,
+      body.senderAddress?.postCode || body.senderPostCode || null,
+      body.senderAddress?.country || body.senderCountry || null,
       body.salesperson,
       body.notes || null,
       body.status, // 'paid' | 'pending' | 'draft'
+      body.description || null,
       total
     ]);
+
+    console.log('Created invoice:', inv);
 
     const itemSql = `
       INSERT INTO invoice_items (invoice_id, product_id, name, quantity, unit_price, line_total)
@@ -192,7 +211,8 @@ app.post('/invoices', async (req, res) => {
     res.status(201).json({ ...inv, items });
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error(e); res.status(500).json({ error: 'failed_to_create_invoice' });
+    console.error('Error creating invoice:', e); 
+    res.status(500).json({ error: 'failed_to_create_invoice', details: e.message });
   } finally {
     client.release();
   }
@@ -201,21 +221,183 @@ app.post('/invoices', async (req, res) => {
 app.patch('/invoices/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { customerName, salesperson, notes, status } = req.body || {};
-    const { rows: [inv] } = await pool.query(
-      `UPDATE invoices
-       SET customer_name = COALESCE($2, customer_name),
-           salesperson   = COALESCE($3, salesperson),
-           notes         = COALESCE($4, notes),
-           status        = COALESCE($5, status)
-       WHERE id = $1
-       RETURNING id, code, date, customer_name, salesperson, notes, status, total`,
-      [id, customerName, salesperson, notes, status]
-    );
-    if (!inv) return res.status(404).json({ error: 'not_found' });
-    res.json(inv);
+    const body = req.body || {};
+    console.log('Updating invoice', id, 'with payload:', JSON.stringify(body, null, 2));
+    
+    // Build dynamic SQL for only provided fields
+    const updates = [];
+    const values = [id];
+    let paramCount = 1;
+    
+    if (body.customerName !== undefined) {
+      updates.push(`customer_name = $${++paramCount}`);
+      values.push(body.customerName);
+    }
+    if (body.clientEmail !== undefined) {
+      updates.push(`client_email = $${++paramCount}`);
+      values.push(body.clientEmail);
+    }
+    if (body.salesperson !== undefined) {
+      updates.push(`salesperson = $${++paramCount}`);
+      values.push(body.salesperson);
+    }
+    if (body.notes !== undefined) {
+      updates.push(`notes = $${++paramCount}`);
+      values.push(body.notes);
+    }
+    if (body.description !== undefined) {
+      updates.push(`description = $${++paramCount}`);
+      values.push(body.description);
+    }
+    if (body.status !== undefined) {
+      updates.push(`status = $${++paramCount}`);
+      values.push(body.status);
+    }
+    if (body.paymentTerms !== undefined) {
+      updates.push(`payment_terms = $${++paramCount}`);
+      values.push(body.paymentTerms);
+    }
+    if (body.date !== undefined) {
+      updates.push(`date = $${++paramCount}`);
+      values.push(new Date(body.date));
+    }
+    
+    // Address fields
+    if (body.clientStreet !== undefined) {
+      updates.push(`client_street = $${++paramCount}`);
+      values.push(body.clientStreet);
+    }
+    if (body.clientCity !== undefined) {
+      updates.push(`client_city = $${++paramCount}`);
+      values.push(body.clientCity);
+    }
+    if (body.clientPostCode !== undefined) {
+      updates.push(`client_post_code = $${++paramCount}`);
+      values.push(body.clientPostCode);
+    }
+    if (body.clientCountry !== undefined) {
+      updates.push(`client_country = $${++paramCount}`);
+      values.push(body.clientCountry);
+    }
+    if (body.senderStreet !== undefined) {
+      updates.push(`sender_street = $${++paramCount}`);
+      values.push(body.senderStreet);
+    }
+    if (body.senderCity !== undefined) {
+      updates.push(`sender_city = $${++paramCount}`);
+      values.push(body.senderCity);
+    }
+    if (body.senderPostCode !== undefined) {
+      updates.push(`sender_post_code = $${++paramCount}`);
+      values.push(body.senderPostCode);
+    }
+    if (body.senderCountry !== undefined) {
+      updates.push(`sender_country = $${++paramCount}`);
+      values.push(body.senderCountry);
+    }
+    
+    // Handle items updates if provided
+    let hasItemsUpdate = false;
+    if (body.items && Array.isArray(body.items)) {
+      hasItemsUpdate = true;
+    }
+
+    if (updates.length === 0 && !hasItemsUpdate) {
+      return res.status(400).json({ error: 'no_fields_to_update' });
+    }
+    
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      let inv;
+      // Update invoice fields if there are any updates
+      if (updates.length > 0) {
+        const { rows: [updatedInv] } = await client.query(
+          `UPDATE invoices SET ${updates.join(', ')} WHERE id = $1 RETURNING *`,
+          values
+        );
+        if (!updatedInv) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'not_found' });
+        }
+        inv = updatedInv;
+      } else {
+        // Get existing invoice if we're only updating items
+        const { rows: [existingInv] } = await client.query(
+          'SELECT * FROM invoices WHERE id = $1',
+          [id]
+        );
+        if (!existingInv) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'not_found' });
+        }
+        inv = existingInv;
+      }
+      
+      // Handle items update
+      if (hasItemsUpdate) {
+        console.log('Updating items for invoice:', id, 'New items:', body.items);
+        
+        // Delete existing items
+        await client.query('DELETE FROM invoice_items WHERE invoice_id = $1', [id]);
+        
+        // Calculate new total
+        let total = 0;
+        const items = [];
+        
+        // Insert new items
+        const itemSql = `
+          INSERT INTO invoice_items (invoice_id, product_id, name, quantity, unit_price, line_total)
+          VALUES ($1,$2,$3,$4,$5,$6)
+          RETURNING id, product_id, name, quantity, unit_price, line_total
+        `;
+        
+        for (const it of body.items) {
+          // Skip empty items
+          if (!it.name || !it.name.trim()) continue;
+          
+          // Pull product name if only id provided
+          let name = it.name;
+          if (!name && it.productId) {
+            const { rows: [p] } = await client.query('SELECT name FROM products WHERE id = $1', [it.productId]);
+            name = p?.name;
+          }
+          
+          const qty = Number(it.quantity || 1);
+          const price = Number(it.unitPrice || it.price || 0);
+          const line = qty * price;
+          total += line;
+
+          const { rows: [ritem] } = await client.query(itemSql, [
+            inv.id, it.productId || null, name, qty, price, line
+          ]);
+          items.push(ritem);
+        }
+        
+        // Update total in invoice
+        const { rows: [finalInv] } = await client.query(
+          'UPDATE invoices SET total = $1 WHERE id = $2 RETURNING *',
+          [total, id]
+        );
+        inv = finalInv;
+        
+        console.log('Updated items:', items);
+        console.log('New total:', total);
+      }
+      
+      await client.query('COMMIT');
+      res.json(inv);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('Error in PATCH transaction:', e);
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (e) {
-    console.error(e); res.status(500).json({ error: 'failed_to_update_invoice' });
+    console.error('Error updating invoice:', e); 
+    res.status(500).json({ error: 'failed_to_update_invoice', details: e.message });
   }
 });
 

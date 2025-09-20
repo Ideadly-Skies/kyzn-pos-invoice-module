@@ -132,19 +132,46 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
         if (type === 'edit') {
             const editPayload = {
                 customerName: clientName,
+                clientEmail: clientEmail,
+                clientAddress: {
+                    street: clientStreet,
+                    city: clientCity,
+                    postCode: clientPostCode,
+                    country: clientCountry
+                },
+                senderAddress: {
+                    street: senderStreet,
+                    city: senderCity,
+                    postCode: senderPostCode,
+                    country: senderCountry
+                },
                 salesperson,
+                paymentTerms: paymentTerms,
                 notes: description || '',
+                description: description || '',
                 status,
+                // Include date if it's been changed
+                ...(selectDeliveryDate && { date: new Date(selectDeliveryDate) }),
+                // Include items for editing
+                items: item
+                    .filter(it => (it.name && String(it.name).trim()) || it.productId)
+                    .map(it => ({
+                        productId: it.productId ?? undefined,
+                        name: it.name ?? undefined,
+                        quantity: Number(it.quantity || 1),
+                        unitPrice: Number(it.price || 0),
+                    }))
             };
 
             try {
                 console.log("Original invoice:", invoice);
+                console.log("Edit payload being sent:", editPayload);
                 const result = await patchInvoice(invoice.id, editPayload);
                 console.log("Patch result:", result);
                 
-                // Use the adapter to convert API result to UI format, but merge with existing invoice data
-                const adaptedResult = adaptInvoiceFromApi({ ...result, items: invoice.items || [] });
-                console.log("Adapted result:", adaptedResult);
+                // The result is already adapted by patchInvoice, just ensure it has the original items
+                const adaptedResult = { ...result, items: invoice.items || [] };
+                console.log("Final adapted result:", adaptedResult);
                 
                 // Update the specific invoice in Redux
                 dispatch(updateInvoice(adaptedResult));
@@ -167,10 +194,25 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
             const payload = {
                 code: `INV-${Date.now()}`,
                 date: selectDeliveryDate ? new Date(selectDeliveryDate) : new Date(),
+                paymentTerms: paymentTerms,
                 customerName: clientName,
+                clientEmail: clientEmail,
+                clientAddress: {
+                    street: clientStreet,
+                    city: clientCity,
+                    postCode: clientPostCode,
+                    country: clientCountry
+                },
+                senderAddress: {
+                    street: senderStreet,
+                    city: senderCity,
+                    postCode: senderPostCode,
+                    country: senderCountry
+                },
                 salesperson,
                 status,
                 notes: description || '',
+                description: description || '',
                 items: item
                     .filter(it => (it.name && String(it.name).trim()) || it.productId)
                     .map(it => ({
@@ -236,33 +278,22 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
     function validator() {
         const salesValid = salesperson && salesperson.trim().length > 0;
         
-        // For edit mode, only validate the fields that can be updated
-        if (type === 'edit') {
-            return validateCLientName(clientName) && salesValid;
-        }
-        
-        // For create mode, validate all fields
-        if (
+        // Validate basic fields for both create and edit modes
+        const basicFieldsValid = (
             validateSenderStreetAddress(senderStreet) && validateSenderPostCode(senderPostCode) &&
             validateSenderCity(senderCity) && validateCLientEmail(clientEmail) &&
             validateCLientName(clientName) && validateClientCity(clientCity) &&
             validateClientPostCode(clientPostCode) && validateClientStreetAddress(clientStreet) &&
             validateSenderCountry(senderCountry) && validateClientCountry(clientCountry) && 
-            salesValid && itemsValidator()
-        ) { return true }
-
-        return false
+            salesValid
+        );
+        
+        // For both create and edit modes, validate items
+        return basicFieldsValid && itemsValidator();
     }
 
     function debugValidation() {
         const salesValid = salesperson && salesperson.trim().length > 0;
-        
-        if (type === 'edit') {
-            return {
-                clientName: validateCLientName(clientName),
-                salesperson: salesValid,
-            };
-        }
         
         return {
             senderStreet: validateSenderStreetAddress(senderStreet),
@@ -313,14 +344,6 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                 }}
             >
                 {/* Bill From */}
-                {type === 'edit' && (
-                    <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                            <strong>Note:</strong> In edit mode, only Customer Name, Salesperson, Status, and Description can be modified due to backend limitations.
-                        </p>
-                    </div>
-                )}
-                
                 <h1 className=' text-[#7c5dfa] mb-4 font-medium'>
                     Bill From
                 </h1>
@@ -328,52 +351,48 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                 <div className=' grid grid-cols-3 mx-1  space-y-4 '>
                     <div className=' flex flex-col col-span-3'>
                         <label className=' text-gray-400 font-light'>
-                            Street Address {type === 'edit' && <span className="text-xs">(Read-only)</span>}
+                            Street Address
                         </label>
                         <input 
                             value={senderStreet} 
                             id='senderStreet' 
                             onChange={(e) => setSenderStreet(e.target.value)} 
                             type='text' 
-                            disabled={type === 'edit'}
-                            className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none  dark:border-gray-800 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderStreetAddress(senderStreet) && ' border-red-500 dark:border-red-500 outline-red-500 border-2'}`} 
+                            className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none  dark:border-gray-800 ${isValidatorActive && !validateSenderStreetAddress(senderStreet) && ' border-red-500 dark:border-red-500 outline-red-500 border-2'}`} 
                         />
                     </div>
 
                     <div className=' flex flex-col mr-4 col-span-1'>
                         <label className=' text-gray-400 font-light'>
-                            City {type === 'edit' && <span className="text-xs">(Read-only)</span>}
+                            City
                         </label>
                         <input 
                             type='text' 
                             value={senderCity} 
                             onChange={(e) => setSenderCity(e.target.value)} 
-                            disabled={type === 'edit'}
-                            className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 border-gray-300 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderCity(senderCity) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} 
+                            className={`dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 border-gray-300 ${isValidatorActive && !validateSenderCity(senderCity) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} 
                         />
                     </div>
                     <div className=' flex flex-col mr-4 col-span-1'>
                         <label className=' text-gray-400 font-light'>
-                            Post Code {type === 'edit' && <span className="text-xs">(Read-only)</span>}
+                            Post Code
                         </label>
                         <input 
                             type='text' 
                             value={senderPostCode} 
                             onChange={(e) => setSenderPostCode(e.target.value)} 
-                            disabled={type === 'edit'}
-                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg focus:outline-none  focus:outline-purple-400 border-gray-300 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderPostCode(senderPostCode) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} 
+                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg focus:outline-none  focus:outline-purple-400 border-gray-300 ${isValidatorActive && !validateSenderPostCode(senderPostCode) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} dark:border-gray-800`} 
                         />
                     </div>
                     <div className=' flex flex-col col-span-1'>
                         <label className=' text-gray-400 font-light'>
-                            Country {type === 'edit' && <span className="text-xs">(Read-only)</span>}
+                            Country
                         </label>
                         <input 
                             type='text' 
                             value={senderCountry} 
                             onChange={(e) => setSenderCountry(e.target.value)} 
-                            disabled={type === 'edit'}
-                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateSenderCountry(senderCountry) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} border-gray-300 dark:border-gray-800`} 
+                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] focus:outline-none  rounded-lg  focus:outline-purple-400 ${isValidatorActive && !validateSenderCountry(senderCountry) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'} border-gray-300 dark:border-gray-800`} 
                         />
                     </div>
                 </div>
@@ -393,14 +412,13 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
 
                     <div className=' flex flex-col   col-span-3'>
                         <label className=' text-gray-400 font-light'>
-                            Client Email {type === 'edit' && <span className="text-xs">(Read-only)</span>}
+                            Client Email
                         </label>
                         <input 
                             type='text' 
                             value={clientEmail} 
                             onChange={(e) => setClientEmail(e.target.value)} 
-                            disabled={type === 'edit'}
-                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none ${type === 'edit' ? 'opacity-50 cursor-not-allowed' : ''} ${isValidatorActive && !validateCLientEmail(clientEmail) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'}   dark:border-gray-800`} 
+                            className={` dark:bg-[#1e2139] py-2 px-4 border-[.2px] rounded-lg  focus:outline-purple-400 border-gray-300 focus:outline-none ${isValidatorActive && !validateCLientEmail(clientEmail) && 'border-red-500 dark:border-red-500 outline-red-500 border-2'}   dark:border-gray-800`} 
                         />
                     </div>
 
@@ -486,28 +504,19 @@ function CreateInvoice({ openCreateInvoice, setOpenCreateInvoice, invoice, type 
                     </div>
 
                     <h2 className='text-2xl text-gray-500 mt-10 '>Item List</h2>
-                    {type === 'edit' && (
-                        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-600 rounded-lg">
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                Items cannot be modified in edit mode due to backend limitations.
-                            </p>
-                        </div>
-                    )}
                     {item.map((itemDetails, index) => (
-                        <div key={itemDetails.id} className={`border-b pb-2 border-gray-300 mb-4 ${type === 'edit' ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div key={itemDetails.id} className="border-b pb-2 border-gray-300 mb-4">
                         <AddItem isValidatorActive={isValidatorActive} handelOnChange={handelOnChange} setItem={setItem} onDelete={onDelete} itemDetails={itemDetails} />
                         </div>
                     ))}
 
-                    {type !== 'edit' && (
-                        <button
-                            onClick={() => {
-                            setItem((state) => [...state, { name: "", quantity: 1, price: 0, total: 0, id: uuidv4() }])
-                        }}
-                            className='bg-gray-200 hover:opacity-80 mx-auto py-2 items-center dark:text-white dark:bg-[#252945] justify-center rounded-xl w-full mt-6'>
-                            + Add New Item
-                        </button>
-                    )}
+                    <button
+                        onClick={() => {
+                        setItem((state) => [...state, { name: "", quantity: 1, price: 0, total: 0, id: uuidv4() }])
+                    }}
+                        className='bg-gray-200 hover:opacity-80 mx-auto py-2 items-center dark:text-white dark:bg-[#252945] justify-center rounded-xl w-full mt-6'>
+                        + Add New Item
+                    </button>
             </form>
 
                     <div className='flex justify-between'>
