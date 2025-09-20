@@ -8,6 +8,7 @@ import store from './redux/store'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    {/* configure store for redux */}
     <Provider store={store}>
       <BrowserRouter>
         <App />

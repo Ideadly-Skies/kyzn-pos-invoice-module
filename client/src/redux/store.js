@@ -1,11 +1,10 @@
-import { configureStore } from "@reduxjs/toolkit";
-import invoiceSlice from '../redux/invoiceSlice'
-
+import { configureStore } from '@reduxjs/toolkit';
+import invoicesReducer from './invoiceSlice';
 
 const store = configureStore({
   reducer: {
-    invoices: invoiceSlice.reducer,
-  }
-})
+    invoices: invoicesReducer,
+  },
+});
 
-export default store
+export default store;
