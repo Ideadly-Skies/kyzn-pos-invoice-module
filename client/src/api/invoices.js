@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8080';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 // fetch invoice over from the backend
 export async function fetchInvoices({ cursor = null, limit = 10 } = {}) {
